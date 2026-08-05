@@ -20,7 +20,11 @@ Encaja en un ecosistema de varias apps: RevScope, y cualquier otra que quiera IA
 
 ## Estado
 
-🌱 **Semilla.** Este repo arranca desde un prompt de kickoff (ver [`docs/KICKOFF.md`](docs/KICKOFF.md)) que contiene la investigación, el stack recomendado, la dirección de UX y el plan concreto para la primera sesión de desarrollo.
+🚧 **Fase 1 funcional.** Motor llama.cpp (JNI, submódulo `b10276`) cargando GGUF con mmap, chat con streaming token a token, y benchmarks reales en S25 Ultra: **65 tok/s** (Qwen2.5-0.5B Q4) / **23 tok/s** (1.5B Q4) — ver [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
+
+- Hecho: esqueleto multi-módulo (Compose+Hilt), `InferenceEngine` + `LlamaCppEngine`, pantalla de Chat con selector de modelo y stats tok/s, tests de ViewModel (TDD) + smoke instrumentado en dispositivo.
+- Siguiente: Fase 2 (chequeo de compatibilidad del dispositivo), Fase 3 (descarga desde Hugging Face), Fase 4 (servidor OpenAI-compatible).
+- Plan detallado: [`docs/plans/2026-08-04-fase-0-1-esqueleto-motor-chat.md`](docs/plans/2026-08-04-fase-0-1-esqueleto-motor-chat.md) · Kickoff: [`docs/KICKOFF.md`](docs/KICKOFF.md)
 
 ## Licencia
 
