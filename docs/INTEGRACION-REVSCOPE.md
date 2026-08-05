@@ -39,6 +39,8 @@ Ninguna función de RevScope cabe en 20 segundos con un 3B a ~10 tok/s:
 
 Y como RevScope pide respuesta completa (sin `stream`), no hay forma de ir mandando tokens para mantener viva la conexión… con una excepción: el read timeout de `HttpURLConnection` se aplica **por operación de lectura**, no al total. Si Nodo emite bytes periódicamente, nunca expira.
 
+**Medido en el S25 (2026-08-05, `IntegracionRevScopeTest`)**: una petición de 600 tokens al 1.5B a través del servidor tardó **70 segundos** — unos 8.5 tok/s efectivos, muy por debajo de los 22 tok/s del benchmark aislado (throttling sostenido más el costo del servidor). Con ese número real, **ninguna función de RevScope cabe en 20 s con ningún modelo salvo el 0.5B**, y la tabla de arriba resulta optimista. El latido no es una optimización: sin él la integración no funciona.
+
 Tres salidas, de menos a más invasiva:
 - **Padding keep-alive** (cero cambios en RevScope): Nodo responde con `Transfer-Encoding: chunked` y va emitiendo espacios en blanco mientras genera, y al final el JSON. `JSONObject` ignora el whitespace inicial. Es un hack, pero es el único camino que no toca RevScope.
 - **Subir el read timeout** en RevScope a 120 s cuando el proveedor es local (1 línea, pero cambia RevScope).
@@ -75,6 +77,17 @@ Aquí conecta lo de tool calling (ver `MODELOS.md`): si Nodo expone `tools` y de
 Segunda: el **resumen de viaje**, que corre de fondo y nadie mira esperando.
 
 Dejar el **chat con mecánico** para el final: 800 tokens no caben ni con el 1.5B.
+
+## Estado real (verificado en dispositivo)
+
+`app/src/androidTest/.../IntegracionRevScopeTest.kt` habla con el servidor de Nodo replicando byte por byte el cliente de RevScope (mismo `HttpURLConnection`, mismo cuerpo, mismos timeouts de 10/20 s, mismo parseo `choices[0].message.content`). Resultado en el S25 con el Qwen2.5-1.5B:
+
+- **Petición estilo RevScope → respuesta válida.** Preguntando por el código P0301 devolvió texto parseable por `AiResponseParsers`. Ojo: el contenido era **incorrecto** (dijo que P0301 es un problema de válvula de escape; en realidad es fallo de encendido en el cilindro 1). Un 1.5B no sabe de códigos OBD2 — el transporte funciona, la calidad no alcanza. Habrá que probar el 3B o inyectar la definición del código en el prompt.
+- **El latido evita el timeout**: 600 tokens en **70 s** con un read timeout de 20 s, sin cortes.
+- **`/health` y `/v1/models`** responden lo que espera un cliente OpenAI.
+- **Peticiones solapadas**: la primera recibe 200 y la segunda **429**, en vez de encolarse hasta agotar el timeout.
+
+Falta el único cambio obligatorio del lado de RevScope: el `network_security_config` que permita cleartext a localhost.
 
 ## Riesgos
 

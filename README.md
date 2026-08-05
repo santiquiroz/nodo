@@ -20,11 +20,23 @@ Encaja en un ecosistema de varias apps: RevScope, y cualquier otra que quiera IA
 
 ## Estado
 
-🚧 **Fase 1 funcional.** Motor llama.cpp (JNI, submódulo `b10276`) cargando GGUF con mmap, chat con streaming token a token, y benchmarks reales en S25 Ultra: **65 tok/s** (Qwen2.5-0.5B Q4) / **23 tok/s** (1.5B Q4) — ver [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
+🚧 **Sirviendo modelos de verdad.** Motor llama.cpp (JNI, submódulo `b10276`) cargando GGUF con mmap, chat con streaming, y un servidor OpenAI-compatible en un foreground service. Verificado en un S25 Ultra: **65 tok/s** (Qwen2.5-0.5B Q4) / **23 tok/s** (1.5B Q4) — ver [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
 
-- Hecho: esqueleto multi-módulo (Compose+Hilt), `InferenceEngine` + `LlamaCppEngine`, pantalla de Chat con selector de modelo y stats tok/s, tests de ViewModel (TDD) + smoke instrumentado en dispositivo.
-- Siguiente: Fase 2 (chequeo de compatibilidad del dispositivo), Fase 3 (descarga desde Hugging Face), Fase 4 (servidor OpenAI-compatible).
-- Plan detallado: [`docs/plans/2026-08-04-fase-0-1-esqueleto-motor-chat.md`](docs/plans/2026-08-04-fase-0-1-esqueleto-motor-chat.md) · Kickoff: [`docs/KICKOFF.md`](docs/KICKOFF.md)
+- **Motor** — `InferenceEngine` + `LlamaCppEngine` (mmap, plantilla de chat del GGUF, streaming token a token, errores tipados).
+- **Chat** — pantalla de prueba con selector de modelo y velocidad real por respuesta.
+- **Servidor** — `POST /v1/chat/completions` (respuesta completa o SSE), `/v1/models`, `/health`; foreground service, exposición opcional en la WiFi y 429 ante peticiones solapadas.
+- **Integración verificada** — un test replica byte por byte el cliente de [RevScope](https://github.com/santiquiroz/revscope) y obtiene respuestas del modelo local; ver [`docs/INTEGRACION-REVSCOPE.md`](docs/INTEGRACION-REVSCOPE.md).
+- **Tool calling** — los modelos 3B emiten llamadas a herramientas bien formadas on-device; ver [`docs/MODELOS.md`](docs/MODELOS.md).
+
+Siguiente: chequeo de compatibilidad del dispositivo (semáforo antes de descargar) y descarga de modelos desde Hugging Face dentro de la app.
+
+Kickoff y plan: [`docs/KICKOFF.md`](docs/KICKOFF.md) · [`docs/plans/`](docs/plans/)
+
+## Cómo usarlo hoy
+
+1. Copia un `.gguf` a `Android/data/com.santiquiroz.nodo/files/models/` (por ADB: `adb push modelo.gguf /sdcard/Android/data/com.santiquiroz.nodo/files/models/`).
+2. Abre Nodo → pestaña **Servidor** → elige el modelo → **Iniciar servidor**.
+3. Copia la URL local y pégala en cualquier cliente compatible con OpenAI.
 
 ## Licencia
 
