@@ -2,6 +2,7 @@ package com.santiquiroz.nodo.core.models
 
 import com.santiquiroz.nodo.core.capability.GgufMetadata
 import com.santiquiroz.nodo.core.capability.ModelSpec
+import com.santiquiroz.nodo.core.settings.Preferencias
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -18,9 +19,11 @@ private const val TIEMPO_LECTURA_MS = 30_000
 private const val BYTES_DE_CABECERA = 2_000_000L
 
 @Singleton
-class HuggingFaceClient @Inject constructor() {
-
-    var token: String? = null
+class HuggingFaceClient @Inject constructor(
+    private val preferencias: Preferencias,
+) {
+    /** Se relee en cada petición: si el usuario lo pega en Ajustes, la siguiente descarga ya lo usa. */
+    suspend fun token(): String? = preferencias.actuales().tokenHuggingFace.takeIf { it.isNotBlank() }
 
     suspend fun buscar(consulta: String, limite: Int = 30): Result<List<RepoDeModelos>> =
         pedirTexto(
@@ -68,14 +71,14 @@ class HuggingFaceClient @Inject constructor() {
         }
     }
 
-    private fun abrir(url: String): HttpURLConnection =
+    private suspend fun abrir(url: String): HttpURLConnection =
         (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = TIEMPO_CONEXION_MS
             readTimeout = TIEMPO_LECTURA_MS
             instanceFollowRedirects = true
             setRequestProperty("User-Agent", "Nodo/0.1 (Android)")
-            token?.takeIf { it.isNotBlank() }?.let { setRequestProperty("Authorization", "Bearer $it") }
+            token()?.let { setRequestProperty("Authorization", "Bearer $it") }
         }
 
     private fun mensajeDeError(codigo: Int, contexto: String): String = when (codigo) {

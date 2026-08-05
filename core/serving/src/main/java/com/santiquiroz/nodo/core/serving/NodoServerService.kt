@@ -12,6 +12,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.santiquiroz.nodo.core.inference.EngineConfig
 import com.santiquiroz.nodo.core.inference.InferenceEngine
+import com.santiquiroz.nodo.core.settings.Preferencias
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +43,9 @@ class NodoServerService : Service() {
 
     @Inject
     lateinit var estado: ServerStateHolder
+
+    @Inject
+    lateinit var preferencias: Preferencias
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var servidor: NodoHttpServer? = null
@@ -108,7 +112,10 @@ class NodoServerService : Service() {
 
         // Precalentar: la primera petición no debería pagar la carga completa del modelo
         if (rutaModelo != null) {
-            scope.launch { engine.load(rutaModelo, EngineConfig()) }
+            scope.launch {
+                val ajustes = preferencias.actuales()
+                engine.load(rutaModelo, EngineConfig(contextLength = ajustes.contexto, threads = ajustes.hilos))
+            }
         }
     }
 

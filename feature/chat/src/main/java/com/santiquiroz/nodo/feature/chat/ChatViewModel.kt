@@ -3,11 +3,13 @@ package com.santiquiroz.nodo.feature.chat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.santiquiroz.nodo.core.inference.ChatMessage
+import com.santiquiroz.nodo.core.inference.EngineConfig
 import com.santiquiroz.nodo.core.inference.EngineState
 import com.santiquiroz.nodo.core.inference.FinishReason
 import com.santiquiroz.nodo.core.inference.GenerationEvent
 import com.santiquiroz.nodo.core.inference.GenerationStats
 import com.santiquiroz.nodo.core.inference.InferenceEngine
+import com.santiquiroz.nodo.core.settings.Preferencias
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +32,7 @@ data class ChatUiState(
 class ChatViewModel @Inject constructor(
     private val engine: InferenceEngine,
     private val modelFiles: ModelFilesRepository,
+    private val preferencias: Preferencias,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -67,7 +70,10 @@ class ChatViewModel @Inject constructor(
         _uiState.update {
             it.copy(messages = emptyList(), lastStats = null, error = null, isGenerating = false)
         }
-        viewModelScope.launch { engine.load(modelo.path) }
+        viewModelScope.launch {
+            val ajustes = preferencias.actuales()
+            engine.load(modelo.path, EngineConfig(contextLength = ajustes.contexto, threads = ajustes.hilos))
+        }
     }
 
     fun onSend() {

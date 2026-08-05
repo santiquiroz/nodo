@@ -8,6 +8,7 @@ import com.santiquiroz.nodo.core.inference.InferenceEngine
 import com.santiquiroz.nodo.core.serving.NodoHttpServer
 import com.santiquiroz.nodo.core.serving.NodoServerService
 import com.santiquiroz.nodo.core.serving.ServerStateHolder
+import com.santiquiroz.nodo.core.settings.Preferencias
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,6 +37,7 @@ class ServerViewModel @Inject constructor(
     application: Application,
     private val engine: InferenceEngine,
     private val estadoServidor: ServerStateHolder,
+    private val preferencias: Preferencias,
 ) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(ServerUiState())
@@ -43,6 +45,20 @@ class ServerViewModel @Inject constructor(
 
     init {
         refrescarModelos()
+        viewModelScope.launch {
+            preferencias.ajustes.collect { ajustes ->
+                // Mientras el servidor corre manda el puerto real con el que arrancó
+                if (!_uiState.value.corriendo) {
+                    _uiState.update {
+                        it.copy(
+                            puerto = ajustes.puerto,
+                            exponerEnLan = ajustes.exponerEnLan,
+                            urlLocal = "http://127.0.0.1:${ajustes.puerto}/v1",
+                        )
+                    }
+                }
+            }
+        }
         viewModelScope.launch {
             estadoServidor.estado.collect { estado ->
                 _uiState.update {
@@ -79,6 +95,7 @@ class ServerViewModel @Inject constructor(
 
     fun alternarLan(activo: Boolean) {
         _uiState.update { it.copy(exponerEnLan = activo) }
+        viewModelScope.launch { preferencias.guardarExponerEnLan(activo) }
     }
 
     fun alternarServidor() {

@@ -20,6 +20,7 @@ android {
 
 dependencies {
     implementation(project(":core:inference"))
+    implementation(project(":core:settings"))
     implementation(project(":core:serving"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

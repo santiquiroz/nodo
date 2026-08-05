@@ -59,7 +59,7 @@ class ModelDownloader @Inject constructor(
             return@flow
         }
 
-        val resultado = runCatching { transferir(archivo, parcial) { emit(it) } }
+        val resultado = runCatching { transferir(archivo, parcial, client.token()) { emit(it) } }
         resultado.onFailure { error ->
             currentCoroutineContext().ensureActive()   // una cancelación no es un fallo que reportar
             emit(ProgresoDescarga.Fallida(error.message ?: "Fallo de red"))
@@ -80,6 +80,7 @@ class ModelDownloader @Inject constructor(
     private suspend inline fun transferir(
         archivo: ArchivoGguf,
         parcial: File,
+        tokenDeSesion: String?,
         emitir: (ProgresoDescarga) -> Unit,
     ) {
         val yaDescargado = parcial.length()
@@ -89,7 +90,7 @@ class ModelDownloader @Inject constructor(
             readTimeout = 60_000
             instanceFollowRedirects = true
             setRequestProperty("User-Agent", "Nodo/0.1 (Android)")
-            client.token?.takeIf { it.isNotBlank() }?.let { setRequestProperty("Authorization", "Bearer $it") }
+            tokenDeSesion?.let { setRequestProperty("Authorization", "Bearer $it") }
             if (yaDescargado > 0) setRequestProperty("Range", "bytes=$yaDescargado-")
         }
 

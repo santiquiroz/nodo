@@ -11,6 +11,7 @@ import com.santiquiroz.nodo.core.models.ArchivoGguf
 import com.santiquiroz.nodo.core.models.HuggingFaceClient
 import com.santiquiroz.nodo.core.models.ModelDownloader
 import com.santiquiroz.nodo.core.models.ProgresoDescarga
+import com.santiquiroz.nodo.core.settings.NodoPreferences
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
@@ -27,7 +28,9 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class HuggingFaceRealTest {
 
-    private val client = HuggingFaceClient()
+    private val client = HuggingFaceClient(
+        NodoPreferences(InstrumentationRegistry.getInstrumentation().targetContext),
+    )
 
     private fun dispositivo(): DeviceProfile {
         val ctx = InstrumentationRegistry.getInstrumentation().targetContext

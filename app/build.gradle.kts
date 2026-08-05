@@ -38,6 +38,8 @@ dependencies {
     implementation(project(":core:capability"))
     implementation(project(":feature:chat"))
     implementation(project(":core:models"))
+    implementation(project(":core:settings"))
+    implementation(project(":feature:settings"))
     implementation(project(":feature:explore"))
     implementation(project(":feature:models"))
     implementation(project(":feature:server"))

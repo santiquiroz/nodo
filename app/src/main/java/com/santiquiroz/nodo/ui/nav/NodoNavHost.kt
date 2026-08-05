@@ -26,6 +26,7 @@ import com.santiquiroz.nodo.feature.chat.ChatScreen
 import com.santiquiroz.nodo.feature.explore.ExploreScreen
 import com.santiquiroz.nodo.feature.models.ModelsScreen
 import com.santiquiroz.nodo.feature.server.ServerScreen
+import com.santiquiroz.nodo.feature.settings.SettingsScreen
 import com.santiquiroz.nodo.ui.screens.PlaceholderScreen
 
 data class Destino(val ruta: String, val titulo: String, val icono: ImageVector)
@@ -75,7 +76,7 @@ fun NodoNavHost() {
             composable("explorar") { ExploreScreen() }
             composable("servidor") { ServerScreen() }
             composable("chat") { ChatScreen() }
-            composable("ajustes") { PlaceholderScreen("Ajustes") }
+            composable("ajustes") { SettingsScreen() }
         }
     }
 }

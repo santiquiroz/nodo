@@ -1,13 +1,12 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
 }
 
 android {
-    namespace = "com.santiquiroz.nodo.core.models"
+    namespace = "com.santiquiroz.nodo.core.settings"
     compileSdk = 36
     defaultConfig { minSdk = 31 }
     compileOptions {
@@ -18,10 +17,8 @@ android {
 }
 
 dependencies {
-    implementation(project(":core:capability"))
-    implementation(project(":core:settings"))
     implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.androidx.datastore.preferences)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     testImplementation(libs.junit)
