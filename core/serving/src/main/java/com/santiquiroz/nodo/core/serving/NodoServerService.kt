@@ -1,0 +1,145 @@
+package com.santiquiroz.nodo.core.serving
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.Context
+import android.content.Intent
+import android.os.IBinder
+import androidx.core.app.NotificationCompat
+import com.santiquiroz.nodo.core.inference.EngineConfig
+import com.santiquiroz.nodo.core.inference.InferenceEngine
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+/**
+ * Mantiene el modelo caliente y el servidor HTTP vivo mientras la app está en segundo plano.
+ *
+ * Tipo `connectedDevice`: Android 14+ exige un foregroundServiceType y no existe uno para IA;
+ * `dataSync` está capado a ~6 h/día en Android 15 y `specialUse` requiere justificación en
+ * Play Console. Servir clientes en localhost/LAN encaja en connectedDevice.
+ */
+@AndroidEntryPoint
+class NodoServerService : Service() {
+
+    @Inject
+    lateinit var engine: InferenceEngine
+
+    @Inject
+    lateinit var estado: ServerStateHolder
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var servidor: NodoHttpServer? = null
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACCION_DETENER -> {
+                detenerTodo()
+                return START_NOT_STICKY
+            }
+            else -> arrancar(intent)
+        }
+        return START_STICKY
+    }
+
+    private fun arrancar(intent: Intent?) {
+        val puerto = intent?.getIntExtra(EXTRA_PUERTO, NodoHttpServer.PUERTO_DEFECTO)
+            ?: NodoHttpServer.PUERTO_DEFECTO
+        val exponerEnLan = intent?.getBooleanExtra(EXTRA_LAN, false) ?: false
+        val rutaModelo = intent?.getStringExtra(EXTRA_MODELO)
+
+        crearCanal()
+        startForeground(ID_NOTIFICACION, construirNotificacion(puerto, exponerEnLan))
+
+        if (servidor == null) {
+            val srv = NodoHttpServer(
+                service = ChatCompletionsService(engine),
+                puerto = puerto,
+                soloLocalhost = !exponerEnLan,
+            )
+            srv.iniciar()
+            servidor = srv
+            estado.marcarIniciado(puerto, exponerEnLan)
+        }
+
+        // Precalentar: la primera petición no debería pagar la carga completa del modelo
+        if (rutaModelo != null) {
+            scope.launch { engine.load(rutaModelo, EngineConfig()) }
+        }
+    }
+
+    private fun detenerTodo() {
+        servidor?.detener()
+        servidor = null
+        estado.marcarDetenido()
+        scope.launch { engine.unload() }
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    override fun onDestroy() {
+        servidor?.detener()
+        servidor = null
+        estado.marcarDetenido()
+        scope.cancel()
+        super.onDestroy()
+    }
+
+    private fun crearCanal() {
+        val canal = NotificationChannel(
+            ID_CANAL,
+            "Servidor de Nodo",
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply { description = "Indica que Nodo está sirviendo modelos a otras apps" }
+        getSystemService(NotificationManager::class.java).createNotificationChannel(canal)
+    }
+
+    private fun construirNotificacion(puerto: Int, enLan: Boolean): Notification {
+        val alcance = if (enLan) "localhost y red WiFi" else "localhost"
+        val detener = PendingIntent.getService(
+            this,
+            0,
+            Intent(this, NodoServerService::class.java).setAction(ACCION_DETENER),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
+        return NotificationCompat.Builder(this, ID_CANAL)
+            .setContentTitle("Nodo sirviendo en el puerto $puerto")
+            .setContentText("Disponible en $alcance")
+            .setSmallIcon(android.R.drawable.stat_sys_upload)
+            .setOngoing(true)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Detener", detener)
+            .build()
+    }
+
+    companion object {
+        private const val ID_CANAL = "nodo_servidor"
+        private const val ID_NOTIFICACION = 1
+        const val ACCION_DETENER = "com.santiquiroz.nodo.DETENER_SERVIDOR"
+        const val EXTRA_PUERTO = "puerto"
+        const val EXTRA_LAN = "lan"
+        const val EXTRA_MODELO = "modelo"
+
+        fun iniciar(context: Context, puerto: Int, enLan: Boolean, rutaModelo: String?) {
+            val intent = Intent(context, NodoServerService::class.java)
+                .putExtra(EXTRA_PUERTO, puerto)
+                .putExtra(EXTRA_LAN, enLan)
+                .putExtra(EXTRA_MODELO, rutaModelo)
+            context.startForegroundService(intent)
+        }
+
+        fun detener(context: Context) {
+            context.startService(
+                Intent(context, NodoServerService::class.java).setAction(ACCION_DETENER),
+            )
+        }
+    }
+}

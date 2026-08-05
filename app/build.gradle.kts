@@ -34,7 +34,9 @@ android {
 
 dependencies {
     implementation(project(":core:inference"))
+    implementation(project(":core:serving"))
     implementation(project(":feature:chat"))
+    implementation(project(":feature:server"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))

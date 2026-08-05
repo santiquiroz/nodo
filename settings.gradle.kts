@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "nodo"
-include(":app", ":core:inference", ":feature:chat")
+include(":app", ":core:inference", ":core:serving", ":feature:chat", ":feature:server")
