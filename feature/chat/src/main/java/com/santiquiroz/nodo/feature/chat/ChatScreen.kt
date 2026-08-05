@@ -109,13 +109,18 @@ private fun SelectorModelo(
             "Sin modelos en Android/data/com.santiquiroz.nodo/files/models" else "Elige un modelo"
     }
     ExposedDropdownMenuBox(
-        expanded = expandido,
-        onExpandedChange = { expandido = it; if (it) onRefrescar() },
+        expanded = expandido && !estado.isGenerating,
+        onExpandedChange = { abierto ->
+            if (estado.isGenerating) return@ExposedDropdownMenuBox
+            expandido = abierto
+            if (abierto) onRefrescar()
+        },
     ) {
         OutlinedTextField(
             value = etiqueta,
             onValueChange = {},
             readOnly = true,
+            enabled = !estado.isGenerating,
             modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandido) },
             label = { Text("Modelo") },

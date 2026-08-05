@@ -4,10 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.santiquiroz.nodo.core.inference.ChatMessage
 import com.santiquiroz.nodo.core.inference.EngineState
+import com.santiquiroz.nodo.core.inference.FinishReason
 import com.santiquiroz.nodo.core.inference.GenerationEvent
 import com.santiquiroz.nodo.core.inference.GenerationStats
 import com.santiquiroz.nodo.core.inference.InferenceEngine
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -33,6 +35,8 @@ class ChatViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState = _uiState.asStateFlow()
 
+    private var genJob: Job? = null
+
     init {
         onRefreshModels()
         viewModelScope.launch {
@@ -43,7 +47,14 @@ class ChatViewModel @Inject constructor(
     }
 
     fun onRefreshModels() {
-        _uiState.update { it.copy(availableModels = modelFiles.listar()) }
+        when (val resultado = modelFiles.listar()) {
+            is ModelosLocales.Ok -> _uiState.update {
+                it.copy(availableModels = resultado.modelos, error = null)
+            }
+            is ModelosLocales.NoDisponible -> _uiState.update {
+                it.copy(availableModels = emptyList(), error = resultado.razon)
+            }
+        }
     }
 
     fun onInputChange(texto: String) {
@@ -51,10 +62,12 @@ class ChatViewModel @Inject constructor(
     }
 
     fun onSelectModel(modelo: ModelFile) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(messages = emptyList(), lastStats = null, error = null) }
-            engine.load(modelo.path)
+        genJob?.cancel()
+        genJob = null
+        _uiState.update {
+            it.copy(messages = emptyList(), lastStats = null, error = null, isGenerating = false)
         }
+        viewModelScope.launch { engine.load(modelo.path) }
     }
 
     fun onSend() {
@@ -63,20 +76,27 @@ class ChatViewModel @Inject constructor(
         if (_uiState.value.engineState !is EngineState.Ready) return
 
         val historial = _uiState.value.messages + ChatMessage(ChatMessage.Role.USER, texto)
-        _uiState.update { it.copy(messages = historial, input = "", isGenerating = true, error = null) }
+        // La burbuja del asistente se crea vacía y se va reemplazando: así los updates
+        // parten del estado actual y no de una lista capturada que puede estar obsoleta.
+        _uiState.update {
+            it.copy(
+                messages = historial + ChatMessage(ChatMessage.Role.ASSISTANT, ""),
+                input = "",
+                isGenerating = true,
+                error = null,
+            )
+        }
 
-        viewModelScope.launch {
+        genJob = viewModelScope.launch {
             val acumulado = StringBuilder()
             engine.generate(historial).collect { evento ->
                 when (evento) {
                     is GenerationEvent.Token -> {
                         acumulado.append(evento.text)
-                        _uiState.update {
-                            it.copy(messages = historial + ChatMessage(ChatMessage.Role.ASSISTANT, acumulado.toString()))
-                        }
+                        reemplazarRespuesta(acumulado.toString())
                     }
                     is GenerationEvent.Done -> _uiState.update {
-                        it.copy(isGenerating = false, lastStats = evento.stats)
+                        it.copy(isGenerating = false, lastStats = evento.stats, error = avisoDeCorte(evento.stats))
                     }
                     is GenerationEvent.Failure -> _uiState.update {
                         it.copy(isGenerating = false, error = evento.message)
@@ -85,4 +105,18 @@ class ChatViewModel @Inject constructor(
             }
         }
     }
+
+    private fun reemplazarRespuesta(texto: String) {
+        _uiState.update { estado ->
+            val mensajes = estado.messages
+            if (mensajes.lastOrNull()?.role != ChatMessage.Role.ASSISTANT) return@update estado
+            estado.copy(
+                messages = mensajes.dropLast(1) + ChatMessage(ChatMessage.Role.ASSISTANT, texto),
+            )
+        }
+    }
+
+    private fun avisoDeCorte(stats: GenerationStats): String? =
+        if (stats.finishReason == FinishReason.LIMITE_TOKENS)
+            "Respuesta truncada: se alcanzó el límite de tokens" else null
 }
