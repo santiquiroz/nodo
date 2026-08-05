@@ -24,19 +24,21 @@ Encaja en un ecosistema de varias apps: RevScope, y cualquier otra que quiera IA
 
 - **Motor** — `InferenceEngine` + `LlamaCppEngine` (mmap, plantilla de chat del GGUF, streaming token a token, errores tipados).
 - **Compatibilidad** — lee la metadata de cada GGUF sin cargar los pesos y dice si corre aquí: 🟢 corre bien / 🟡 justo / 🔴 no cabe, con la huella en GB y los tok/s estimados.
+- **Explorar Hugging Face** — busca repos con GGUF, lista sus cuantizaciones con tamaño y licencia, responde "¿corre aquí?" bajando solo la cabecera del archivo, y descarga con progreso reanudable.
 - **Chat** — pantalla de prueba con selector de modelo y velocidad real por respuesta.
 - **Servidor** — `POST /v1/chat/completions` (respuesta completa o SSE), `/v1/models`, `/health`; foreground service, exposición opcional en la WiFi y 429 ante peticiones solapadas.
 - **Integración verificada** — un test replica byte por byte el cliente de [RevScope](https://github.com/santiquiroz/revscope) y obtiene respuestas del modelo local; ver [`docs/INTEGRACION-REVSCOPE.md`](docs/INTEGRACION-REVSCOPE.md).
 - **Tool calling** — los modelos 3B emiten llamadas a herramientas bien formadas on-device; ver [`docs/MODELOS.md`](docs/MODELOS.md).
 
-Siguiente: descarga de modelos desde Hugging Face dentro de la app, con el semáforo mostrándose antes de bajar nada.
+Siguiente: pantalla de ajustes (token de Hugging Face para modelos restringidos, puerto, tema) y pulido para el primer APK de release.
 
 Kickoff y plan: [`docs/KICKOFF.md`](docs/KICKOFF.md) · [`docs/plans/`](docs/plans/)
 
 ## Cómo usarlo hoy
 
-1. Copia un `.gguf` a `Android/data/com.santiquiroz.nodo/files/models/` (por ADB: `adb push modelo.gguf /sdcard/Android/data/com.santiquiroz.nodo/files/models/`).
-2. Abre Nodo → pestaña **Servidor** → elige el modelo → **Iniciar servidor**.
+1. Pestaña **Explorar** → busca un modelo (por ejemplo `qwen2.5 1.5b instruct`) → abre un repo → toca **¿Corre aquí?** en la cuantización que te interese y descárgala.
+   También puedes copiar un `.gguf` a mano: `adb push modelo.gguf /sdcard/Android/data/com.santiquiroz.nodo/files/models/`
+2. Pestaña **Chat** para probarlo, o **Servidor** → elige el modelo → **Iniciar servidor**.
 3. Copia la URL local y pégala en cualquier cliente compatible con OpenAI.
 
 ## Licencia
