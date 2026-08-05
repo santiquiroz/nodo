@@ -1,8 +1,6 @@
 package com.santiquiroz.nodo.feature.server
 
 import android.app.Application
-import android.content.Context
-import android.net.wifi.WifiManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.santiquiroz.nodo.core.inference.EngineState
@@ -16,6 +14,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
+import java.net.Inet4Address
+import java.net.NetworkInterface
 import javax.inject.Inject
 
 data class ServerUiState(
@@ -27,6 +27,8 @@ data class ServerUiState(
     val urlLan: String? = null,
     val modelosDisponibles: List<File> = emptyList(),
     val modeloElegido: File? = null,
+    val token: String? = null,
+    val error: String? = null,
 )
 
 @HiltViewModel
@@ -48,6 +50,8 @@ class ServerViewModel @Inject constructor(
                         corriendo = estado.corriendo,
                         puerto = estado.puerto,
                         exponerEnLan = estado.expuestoEnLan,
+                        token = estado.token,
+                        error = estado.error,
                         urlLocal = "http://127.0.0.1:${estado.puerto}/v1",
                         urlLan = if (estado.expuestoEnLan) ipDeLan()?.let { ip -> "http://$ip:${estado.puerto}/v1" } else null,
                     )
@@ -92,12 +96,15 @@ class ServerViewModel @Inject constructor(
         }
     }
 
-    private fun ipDeLan(): String? {
-        val wifi = getApplication<Application>().applicationContext
-            .getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return null
-        @Suppress("DEPRECATION")
-        val ip = wifi.connectionInfo?.ipAddress ?: return null
-        if (ip == 0) return null
-        return "${ip and 0xff}.${ip shr 8 and 0xff}.${ip shr 16 and 0xff}.${ip shr 24 and 0xff}"
-    }
+    // NetworkInterface en vez de WifiManager: no necesita permisos, no revienta si falta
+    // ACCESS_WIFI_STATE, y funciona cuando el teléfono es el punto de acceso o hay tethering.
+    private fun ipDeLan(): String? = runCatching {
+        NetworkInterface.getNetworkInterfaces()
+            .asSequence()
+            .filter { it.isUp && !it.isLoopback }
+            .flatMap { it.inetAddresses.asSequence() }
+            .filterIsInstance<Inet4Address>()
+            .firstOrNull { it.isSiteLocalAddress }
+            ?.hostAddress
+    }.getOrNull()
 }

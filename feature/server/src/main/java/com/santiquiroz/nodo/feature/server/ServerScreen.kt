@@ -38,9 +38,24 @@ fun ServerScreen(viewModel: ServerViewModel = hiltViewModel()) {
     ) {
         TarjetaEstado(estado)
 
+        estado.error?.let { error ->
+            Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+
         if (estado.corriendo) {
             UrlCopiable("URL local", estado.urlLocal) { portapapeles.setText(AnnotatedString(it)) }
             estado.urlLan?.let { UrlCopiable("URL en la red WiFi", it) { url -> portapapeles.setText(AnnotatedString(url)) } }
+            estado.token?.let { token ->
+                UrlCopiable("Token (obligatorio fuera de este teléfono)", token) {
+                    portapapeles.setText(AnnotatedString(it))
+                }
+                Text(
+                    "Mándalo como cabecera Authorization: Bearer <token>. Sin él, cualquiera en la " +
+                        "misma red WiFi podría usar tu modelo.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         SelectorDeModelo(estado.modelosDisponibles, estado.modeloElegido, estado.corriendo, viewModel::elegirModelo)

@@ -10,10 +10,15 @@ import com.santiquiroz.nodo.core.inference.InferenceEngine
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
-/** Resultado de una generación completa, ya en forma de respuesta OpenAI. */
 sealed interface CompletionResult {
     data class Ok(val respuesta: ChatCompletionResponse) : CompletionResult
     data class Fallo(val mensaje: String, val tipo: String) : CompletionResult
+}
+
+/** Motivos detectables ANTES de comprometer el status HTTP de la respuesta. */
+enum class RechazoPrevio(val tipo: String) {
+    SIN_MODELO("model_not_loaded"),
+    PETICION_INVALIDA("invalid_request_error"),
 }
 
 class ChatCompletionsService(
@@ -24,22 +29,37 @@ class ChatCompletionsService(
 
     fun modeloActivo(): String? = (engine.state.value as? EngineState.Ready)?.model?.name
 
+    /** Se comprueba antes de escribir cabeceras, para poder devolver 503/400 de verdad. */
+    fun revisarAntesDeResponder(peticion: ChatCompletionRequest): RechazoPrevio? = when {
+        modeloActivo() == null -> RechazoPrevio.SIN_MODELO
+        aMensajesDeDominio(peticion.messages).isEmpty() -> RechazoPrevio.PETICION_INVALIDA
+        else -> null
+    }
+
+    fun mensajeDeRechazo(rechazo: RechazoPrevio): String = when (rechazo) {
+        RechazoPrevio.SIN_MODELO -> "No hay modelo cargado en Nodo"
+        RechazoPrevio.PETICION_INVALIDA -> "El campo messages no trae ningún mensaje utilizable"
+    }
+
     /**
-     * Genera la respuesta completa emitiendo latidos mientras tanto.
-     *
-     * El latido existe porque clientes como RevScope usan `HttpURLConnection` con un
-     * read timeout de 20 s y no piden streaming: sin bytes intermedios cortan la conexión
-     * antes de que un modelo 3B termine. Los espacios son JSON válido antes del `{`.
+     * Genera la respuesta completa. El keep-alive NO vive aquí: el hueco peligroso es el
+     * prefill del prompt, donde el motor no emite nada, así que el latido lo pone el
+     * servidor con un temporizador propio (ver NodoHttpServer.responderCompleto).
      */
-    fun generarConLatido(peticion: ChatCompletionRequest): Flow<RespuestaParcial> = flow {
+    fun generar(peticion: ChatCompletionRequest): Flow<CompletionResult> = flow {
         val modelo = modeloActivo()
         if (modelo == null) {
-            emit(RespuestaParcial.Final(CompletionResult.Fallo("No hay modelo cargado en Nodo", "model_not_loaded")))
+            emit(CompletionResult.Fallo(mensajeDeRechazo(RechazoPrevio.SIN_MODELO), RechazoPrevio.SIN_MODELO.tipo))
             return@flow
         }
         val mensajes = aMensajesDeDominio(peticion.messages)
         if (mensajes.isEmpty()) {
-            emit(RespuestaParcial.Final(CompletionResult.Fallo("El campo messages está vacío", "invalid_request_error")))
+            emit(
+                CompletionResult.Fallo(
+                    mensajeDeRechazo(RechazoPrevio.PETICION_INVALIDA),
+                    RechazoPrevio.PETICION_INVALIDA.tipo,
+                ),
+            )
             return@flow
         }
 
@@ -49,10 +69,7 @@ class ChatCompletionsService(
 
         engine.generate(mensajes, aParametros(peticion)).collect { evento ->
             when (evento) {
-                is GenerationEvent.Token -> {
-                    texto.append(evento.text)
-                    emit(RespuestaParcial.Latido)
-                }
+                is GenerationEvent.Token -> texto.append(evento.text)
                 is GenerationEvent.Done -> stats = evento.stats
                 is GenerationEvent.Failure -> fallo = evento.message
             }
@@ -60,24 +77,30 @@ class ChatCompletionsService(
 
         val motivo = fallo
         val cierre = stats
-        val resultado = when {
-            motivo != null -> CompletionResult.Fallo(motivo, "engine_error")
-            cierre == null -> CompletionResult.Fallo("El motor terminó sin estadísticas", "engine_error")
-            else -> CompletionResult.Ok(aRespuesta(modelo, texto.toString(), cierre))
-        }
-        emit(RespuestaParcial.Final(resultado))
+        emit(
+            when {
+                motivo != null -> CompletionResult.Fallo(motivo, "engine_error")
+                cierre == null -> CompletionResult.Fallo("El motor terminó sin estadísticas", "engine_error")
+                else -> CompletionResult.Ok(aRespuesta(modelo, texto.toString(), cierre))
+            },
+        )
     }
 
     /** Stream SSE estándar: un chunk por token y `data: [DONE]` al final. */
     fun generarStream(peticion: ChatCompletionRequest): Flow<StreamEvent> = flow {
         val modelo = modeloActivo()
         if (modelo == null) {
-            emit(StreamEvent.Error("No hay modelo cargado en Nodo", "model_not_loaded"))
+            emit(StreamEvent.Error(mensajeDeRechazo(RechazoPrevio.SIN_MODELO), RechazoPrevio.SIN_MODELO.tipo))
             return@flow
         }
         val mensajes = aMensajesDeDominio(peticion.messages)
         if (mensajes.isEmpty()) {
-            emit(StreamEvent.Error("El campo messages está vacío", "invalid_request_error"))
+            emit(
+                StreamEvent.Error(
+                    mensajeDeRechazo(RechazoPrevio.PETICION_INVALIDA),
+                    RechazoPrevio.PETICION_INVALIDA.tipo,
+                ),
+            )
             return@flow
         }
         val id = generarId(reloj())
@@ -132,7 +155,7 @@ class ChatCompletionsService(
         model = modelo,
         choices = listOf(
             Choice(
-                message = WireMessage("assistant", texto),
+                message = WireMessage("assistant", TextoDelMensaje(texto)),
                 finishReason = aMotivo(stats.finishReason),
             ),
         ),
@@ -157,7 +180,8 @@ class ChatCompletionsService(
 
     private fun aMensajesDeDominio(mensajes: List<WireMessage>): List<ChatMessage> =
         mensajes.mapNotNull { wire ->
-            aRol(wire.role)?.let { ChatMessage(it, wire.content) }
+            val texto = wire.content.texto
+            aRol(wire.role)?.takeIf { texto.isNotBlank() }?.let { ChatMessage(it, texto) }
         }
 
     private fun aRol(rol: String): ChatMessage.Role? = when (rol.lowercase()) {
@@ -166,11 +190,6 @@ class ChatCompletionsService(
         "assistant" -> ChatMessage.Role.ASSISTANT
         else -> null
     }
-}
-
-sealed interface RespuestaParcial {
-    data object Latido : RespuestaParcial
-    data class Final(val resultado: CompletionResult) : RespuestaParcial
 }
 
 sealed interface StreamEvent {

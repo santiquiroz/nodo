@@ -1,20 +1,65 @@
 package com.santiquiroz.nodo.core.serving
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.descriptors.buildClassSerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonEncoder
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
+
+/**
+ * El campo `content` de OpenAI admite tres formas: string, null (turnos con tool_calls)
+ * y array de content-parts. Aceptarlas todas evita rechazar payloads legítimos de los
+ * SDK oficiales con un 400 opaco.
+ */
+@Serializable(with = TextoDelMensajeSerializer::class)
+data class TextoDelMensaje(val texto: String)
+
+object TextoDelMensajeSerializer : KSerializer<TextoDelMensaje> {
+    override val descriptor: SerialDescriptor = buildClassSerialDescriptor("TextoDelMensaje")
+
+    override fun deserialize(decoder: Decoder): TextoDelMensaje {
+        val json = decoder as? JsonDecoder ?: return TextoDelMensaje(decoder.decodeString())
+        return TextoDelMensaje(
+            when (val elemento = json.decodeJsonElement()) {
+                is JsonNull -> ""
+                is JsonPrimitive -> elemento.content
+                is JsonArray -> elemento.filterIsInstance<JsonObject>()
+                    .mapNotNull { it["text"]?.jsonPrimitive?.content }
+                    .joinToString("")
+                is JsonObject -> elemento["text"]?.jsonPrimitive?.content.orEmpty()
+            },
+        )
+    }
+
+    override fun serialize(encoder: Encoder, value: TextoDelMensaje) {
+        val json = encoder as? JsonEncoder
+        if (json == null) encoder.encodeString(value.texto)
+        else json.encodeJsonElement(JsonPrimitive(value.texto))
+    }
+}
 
 @Serializable
 data class ChatCompletionRequest(
     val model: String? = null,
     val messages: List<WireMessage> = emptyList(),
     @SerialName("max_tokens") val maxTokens: Int? = null,
+    @SerialName("max_completion_tokens") val maxCompletionTokens: Int? = null,
     val temperature: Float? = null,
     @SerialName("top_p") val topP: Float? = null,
     val stream: Boolean = false,
 )
 
 @Serializable
-data class WireMessage(val role: String, val content: String)
+data class WireMessage(val role: String, val content: TextoDelMensaje = TextoDelMensaje(""))
 
 @Serializable
 data class ChatCompletionResponse(
