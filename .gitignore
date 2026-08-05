@@ -14,3 +14,7 @@ local.properties
 *.task
 /models/
 /.modelos-prueba/
+
+# Keystore de firma (nunca al repo)
+*.jks
+*.keystore

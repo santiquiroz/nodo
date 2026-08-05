@@ -7,40 +7,76 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-private val Fondo = Color(0xFF0B0E14)
-private val Superficie = Color(0xFF131822)
-private val SuperficieAlta = Color(0xFF1B2230)
-private val Primario = Color(0xFF57D9A3)      // verde terminal
-private val Secundario = Color(0xFF7AA2F7)    // azul técnico
-private val TextoPrincipal = Color(0xFFE6E9EF) // contraste >4.5:1 sobre Fondo
-private val TextoSecundario = Color(0xFF8B93A7)
-private val ErrorRojo = Color(0xFFF7768E)
+/**
+ * Dirección: instrumento de medición, no terminal de hacker.
+ *
+ * El fondo es grafito azulado en vez de negro puro, como la carcasa de un aparato.
+ * El ámbar es el color de marca — el de los indicadores de instrumentos analógicos —
+ * y el verde queda reservado exclusivamente para "esto está vivo": estado, no decoración.
+ */
+private val Fondo = Color(0xFF0D1117)
+private val Superficie = Color(0xFF161B22)
+private val SuperficieAlta = Color(0xFF1F262F)
+private val Borde = Color(0xFF2A323D)
+
+private val Ambar = Color(0xFFE8A33D)
+private val AmbarClaro = Color(0xFFF0B95C)
+
+/** Solo para estado: servidor corriendo, modelo cargado, "corre bien". */
+val VerdeSenal = Color(0xFF3FB950)
+
+/** Solo para el escalón intermedio del semáforo. Frío a propósito, para no leerse como el ámbar. */
+val AmarilloAviso = Color(0xFFD6A22B)
+
+private val Rojo = Color(0xFFF25C54)
+private val TextoPrincipal = Color(0xFFE6EDF3)
+private val TextoTenue = Color(0xFF8B949E)
 
 private val EsquemaOscuro = darkColorScheme(
-    primary = Primario,
+    primary = Ambar,
     onPrimary = Fondo,
-    secondary = Secundario,
+    primaryContainer = SuperficieAlta,
+    onPrimaryContainer = AmbarClaro,
+    secondary = VerdeSenal,
     onSecondary = Fondo,
+    tertiary = AmbarClaro,
     background = Fondo,
     onBackground = TextoPrincipal,
     surface = Superficie,
     onSurface = TextoPrincipal,
     surfaceVariant = SuperficieAlta,
-    onSurfaceVariant = TextoSecundario,
-    error = ErrorRojo,
+    onSurfaceVariant = TextoTenue,
+    surfaceContainerHighest = SuperficieAlta,
+    outline = Borde,
+    outlineVariant = Borde,
+    error = Rojo,
     onError = Fondo,
 )
 
-val TipografiaMono = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp)
+/** Cifras y URLs siempre en monoespaciada y con cifras de ancho fijo: no bailan al actualizarse. */
+val EstiloDato = TextStyle(
+    fontFamily = FontFamily.Monospace,
+    fontSize = 13.sp,
+    fontWeight = FontWeight.Medium,
+)
+
+private val TipografiaNodo = Typography().run {
+    copy(
+        titleMedium = titleMedium.copy(fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp),
+        titleSmall = titleSmall.copy(fontWeight = FontWeight.SemiBold),
+        labelSmall = labelSmall.copy(letterSpacing = 0.4.sp),
+    )
+}
 
 @Composable
 fun NodoTheme(content: @Composable () -> Unit) {
-    // v1 es dark-only: estética de herramienta de desarrollador
+    // v1 es solo oscuro: es una consola, no una app de consumo
     MaterialTheme(
         colorScheme = EsquemaOscuro,
-        typography = Typography(),
+        typography = TipografiaNodo,
         content = content,
     )
 }

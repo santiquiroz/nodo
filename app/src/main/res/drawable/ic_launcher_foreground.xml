@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Un núcleo que sirve y tres satélites que consumen: es literalmente lo que hace Nodo.
+  Viewport de 108dp con la figura dentro de la zona segura de 72dp (centro 54,54).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Radios hacia los satélites -->
+    <path
+        android:pathData="M54,54 L54,32"
+        android:strokeColor="#E8A33D"
+        android:strokeWidth="2.5"
+        android:strokeAlpha="0.45"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M54,54 L73,65"
+        android:strokeColor="#E8A33D"
+        android:strokeWidth="2.5"
+        android:strokeAlpha="0.45"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M54,54 L35,65"
+        android:strokeColor="#E8A33D"
+        android:strokeWidth="2.5"
+        android:strokeAlpha="0.45"
+        android:strokeLineCap="round" />
+
+    <!-- Anillo: la O de Nodo, y el perímetro donde viven los clientes -->
+    <path
+        android:pathData="M54,54m-25,0a25,25 0,1 1,50 0a25,25 0,1 1,-50 0"
+        android:strokeColor="#E8A33D"
+        android:strokeWidth="3.5"
+        android:strokeAlpha="0.9" />
+
+    <!-- Satélites sobre el anillo -->
+    <path
+        android:pathData="M54,29m-5.5,0a5.5,5.5 0,1 1,11 0a5.5,5.5 0,1 1,-11 0"
+        android:fillColor="#E8A33D" />
+    <path
+        android:pathData="M75.6,66.5m-5.5,0a5.5,5.5 0,1 1,11 0a5.5,5.5 0,1 1,-11 0"
+        android:fillColor="#E8A33D" />
+    <path
+        android:pathData="M32.4,66.5m-5.5,0a5.5,5.5 0,1 1,11 0a5.5,5.5 0,1 1,-11 0"
+        android:fillColor="#E8A33D" />
+
+    <!-- Núcleo: el modelo cargado una sola vez -->
+    <path
+        android:pathData="M54,54m-11,0a11,11 0,1 1,22 0a11,11 0,1 1,-22 0"
+        android:fillColor="#F0B95C" />
+</vector>

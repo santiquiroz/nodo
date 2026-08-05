@@ -31,7 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.santiquiroz.nodo.core.capability.DeviceProfile
-import com.santiquiroz.nodo.core.capability.Semaforo
+import com.santiquiroz.nodo.core.ui.SemaforoEtiqueta
 
 @Composable
 fun ModelsScreen(viewModel: ModelsViewModel = hiltViewModel()) {
@@ -116,7 +116,7 @@ private fun TarjetaModelo(modelo: ModeloLocal) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            modelo.veredicto?.let { veredicto -> Semaforo(veredicto.semaforo, veredicto.razon) }
+            modelo.veredicto?.let { veredicto -> SemaforoEtiqueta(veredicto.semaforo, veredicto.razon, compacto = false) }
         }
     }
 }
@@ -132,23 +132,3 @@ private fun fichaTecnica(modelo: ModeloLocal): String {
     ).joinToString(" · ")
 }
 
-/** Icono + texto, nunca solo color: el semáforo tiene que leerse sin distinguir tonos. */
-@Composable
-private fun Semaforo(estado: Semaforo, razon: String) {
-    val (icono, color, titulo) = when (estado) {
-        Semaforo.CORRE_BIEN -> Triple(Icons.Outlined.CheckCircle, MaterialTheme.colorScheme.primary, "Corre bien")
-        Semaforo.JUSTO -> Triple(Icons.Outlined.WarningAmber, Color(0xFFE0AF68), "Justo")
-        Semaforo.NO_CABE -> Triple(Icons.Outlined.ErrorOutline, MaterialTheme.colorScheme.error, "No cabe")
-    }
-    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Icon(icono, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
-        Column {
-            Text(titulo, style = MaterialTheme.typography.labelLarge, color = color)
-            Text(
-                razon,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}

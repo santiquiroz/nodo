@@ -19,9 +19,24 @@ android {
         ndk { abiFilters += "arm64-v8a" }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+    // La keystore vive fuera del repo. Sin ella el release sale sin firmar, que es
+    // mejor que fallar el build de quien clone el proyecto.
+    val keystore = file(System.getProperty("user.home") + "/.android/nodo-release.jks")
+    signingConfigs {
+        if (keystore.exists()) {
+            create("release") {
+                storeFile = keystore
+                storePassword = System.getenv("NODO_KEYSTORE_PASS") ?: "nodo-release"
+                keyAlias = "nodo"
+                keyPassword = System.getenv("NODO_KEY_PASS") ?: "nodo-release"
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release")
         }
     }
     buildFeatures { compose = true }
