@@ -37,6 +37,8 @@ dependencies {
     implementation(project(":core:serving"))
     implementation(project(":core:capability"))
     implementation(project(":feature:chat"))
+    implementation(project(":core:models"))
+    implementation(project(":feature:explore"))
     implementation(project(":feature:models"))
     implementation(project(":feature:server"))
     implementation(libs.androidx.core.ktx)

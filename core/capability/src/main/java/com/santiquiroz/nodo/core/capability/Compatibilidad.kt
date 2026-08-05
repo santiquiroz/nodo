@@ -42,9 +42,16 @@ data class Huella(
         // Bytes por parámetro de cada cuantización de llama.cpp (incluye el overhead de bloque)
         private val BYTES_POR_PARAMETRO = mapOf(
             "F32" to 4.0, "F16" to 2.0, "BF16" to 2.0,
-            "Q8_0" to 1.06, "Q6_K" to 0.82, "Q5_K_M" to 0.70, "Q5_0" to 0.69,
-            "Q4_K_M" to 0.55, "Q4_K_S" to 0.52, "Q4_0" to 0.50,
-            "Q3_K_M" to 0.43, "Q2_K" to 0.33,
+            "Q8_0" to 1.06, "Q6_K_L" to 0.90, "Q6_K" to 0.82,
+            "Q5_K_L" to 0.78, "Q5_K_M" to 0.70, "Q5_K_S" to 0.68, "Q5_0" to 0.69, "Q5_1" to 0.75,
+            "Q4_K_L" to 0.63, "Q4_K_M" to 0.55, "Q4_K_S" to 0.52, "Q4_1" to 0.56,
+            "Q4_0" to 0.50, "Q4_0_4_4" to 0.50, "Q4_0_4_8" to 0.50, "Q4_0_8_8" to 0.50,
+            "IQ4_NL" to 0.51, "IQ4_XS" to 0.48,
+            "Q3_K_XL" to 0.54, "Q3_K_L" to 0.47, "Q3_K_M" to 0.43, "Q3_K_S" to 0.39,
+            "IQ3_M" to 0.42, "IQ3_S" to 0.40, "IQ3_XS" to 0.38, "IQ3_XXS" to 0.35,
+            "Q2_K_L" to 0.40, "Q2_K_S" to 0.31, "Q2_K" to 0.33,
+            "IQ2_M" to 0.30, "IQ2_S" to 0.28, "IQ2_XS" to 0.27, "IQ2_XXS" to 0.25,
+            "IQ1_M" to 0.22, "IQ1_S" to 0.20,
         )
 
         // Peor caso conocido: preferimos sobrestimar antes que prometer que cabe y morir por OOM

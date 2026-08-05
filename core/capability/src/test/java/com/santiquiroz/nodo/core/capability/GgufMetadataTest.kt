@@ -123,6 +123,44 @@ class GgufMetadataTest {
     }
 
     @Test
+    fun `en modo esencial corta antes del vocabulario`() {
+        // Un GGUF real trae 150.000 tokens en tokenizer.ggml.tokens; leerlos entero hacía
+        // que la lectura por rango desde Hugging Face muriera con EOFException.
+        val vocabularioEnorme = ConstructorGguf()
+            .cadena("general.architecture", "qwen2")
+            .entero32("general.file_type", 15)
+            .entero32("qwen2.context_length", 32768)
+            .entero32("qwen2.block_count", 28)
+            .entero32("qwen2.attention.head_count", 12)
+            .entero32("qwen2.attention.head_count_kv", 2)
+            .entero32("qwen2.embedding_length", 1536)
+            .arregloDeCadenas("tokenizer.ggml.tokens", List(50_000) { "token$it" })
+            .construir()
+
+        val metadata = GgufMetadata.leerDe(vocabularioEnorme.inputStream(), soloLoEsencial = true)!!
+        assertEquals(28, metadata["qwen2.block_count"])
+        assertTrue("No debería haber leído el vocabulario", !metadata.containsKey("tokenizer.ggml.tokens"))
+    }
+
+    @Test
+    fun `en modo esencial una cabecera truncada tras lo necesario igual sirve`() {
+        val completo = ConstructorGguf()
+            .cadena("general.architecture", "qwen2")
+            .entero32("general.file_type", 15)
+            .entero32("qwen2.context_length", 32768)
+            .entero32("qwen2.block_count", 28)
+            .entero32("qwen2.attention.head_count", 12)
+            .entero32("qwen2.attention.head_count_kv", 2)
+            .entero32("qwen2.embedding_length", 1536)
+            .arregloDeCadenas("tokenizer.ggml.tokens", List(5_000) { "token$it" })
+            .construir()
+        // Simula el corte del Range: los primeros bytes solamente
+        val recortado = completo.copyOf(completo.size / 2)
+        val metadata = GgufMetadata.leerDe(recortado.inputStream(), soloLoEsencial = true)
+        assertEquals(28, metadata!!["qwen2.block_count"])
+    }
+
+    @Test
     fun `un archivo que no es GGUF devuelve null en vez de reventar`() {
         assertNull(GgufMetadata.leerDe("esto no es un modelo".toByteArray().inputStream()))
     }

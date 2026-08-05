@@ -20,7 +20,12 @@ object GgufMetadata {
     fun leer(archivo: File): Map<String, Any>? =
         runCatching { archivo.inputStream().buffered().use { leerDe(it) } }.getOrNull()
 
-    fun leerDe(entrada: InputStream): Map<String, Any>? {
+    /**
+     * @param soloLoEsencial corta en cuanto tiene los campos del semáforo, sin llegar al
+     * vocabulario. Imprescindible al leer por rango desde la red: `tokenizer.ggml.tokens`
+     * son cientos de miles de cadenas y el bloque completo supera de largo unos pocos MB.
+     */
+    fun leerDe(entrada: InputStream, soloLoEsencial: Boolean = false): Map<String, Any>? {
         val datos = DataInputStream(entrada)
         if (leerEntero(datos) != MAGIC) return null
         leerEntero(datos)          // versión
@@ -31,10 +36,26 @@ object GgufMetadata {
         val metadata = mutableMapOf<String, Any>()
         repeat(pares.toInt()) {
             val clave = leerCadena(datos)
-            val valor = leerValor(datos, leerEntero(datos))
-            metadata[clave] = valor
+            val tipo = leerEntero(datos)
+            if (soloLoEsencial && tipo == TIPO_ARRAY) {
+                saltarArreglo(datos)
+            } else {
+                metadata[clave] = leerValor(datos, tipo)
+            }
+            if (soloLoEsencial && tieneLoEsencial(metadata)) return metadata
         }
         return metadata
+    }
+
+    private fun tieneLoEsencial(metadata: Map<String, Any>): Boolean {
+        val arquitectura = metadata["general.architecture"] as? String ?: return false
+        return listOf(
+            "$arquitectura.block_count",
+            "$arquitectura.attention.head_count",
+            "$arquitectura.attention.head_count_kv",
+            "$arquitectura.embedding_length",
+            "$arquitectura.context_length",
+        ).all { metadata.containsKey(it) }
     }
 
     /** Traduce la metadata cruda al ModelSpec que consume el semáforo. */
@@ -90,6 +111,13 @@ object GgufMetadata {
         10, 11 -> leerLargo(datos)
         12 -> java.lang.Double.longBitsToDouble(leerLargo(datos))
         else -> throw IllegalArgumentException("tipo GGUF desconocido: $tipo")
+    }
+
+    /** Consume el arreglo sin materializarlo: el vocabulario no cabe ni interesa. */
+    private fun saltarArreglo(datos: DataInputStream) {
+        val tipoElemento = leerEntero(datos)
+        val n = leerLargo(datos)
+        repeat(n.toInt().coerceAtLeast(0)) { leerValor(datos, tipoElemento) }
     }
 
     private fun leerArreglo(datos: DataInputStream): List<Any> {
