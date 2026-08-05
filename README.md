@@ -23,12 +23,13 @@ Encaja en un ecosistema de varias apps: RevScope, y cualquier otra que quiera IA
 🚧 **Sirviendo modelos de verdad.** Motor llama.cpp (JNI, submódulo `b10276`) cargando GGUF con mmap, chat con streaming, y un servidor OpenAI-compatible en un foreground service. Verificado en un S25 Ultra: **65 tok/s** (Qwen2.5-0.5B Q4) / **23 tok/s** (1.5B Q4) — ver [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
 
 - **Motor** — `InferenceEngine` + `LlamaCppEngine` (mmap, plantilla de chat del GGUF, streaming token a token, errores tipados).
+- **Compatibilidad** — lee la metadata de cada GGUF sin cargar los pesos y dice si corre aquí: 🟢 corre bien / 🟡 justo / 🔴 no cabe, con la huella en GB y los tok/s estimados.
 - **Chat** — pantalla de prueba con selector de modelo y velocidad real por respuesta.
 - **Servidor** — `POST /v1/chat/completions` (respuesta completa o SSE), `/v1/models`, `/health`; foreground service, exposición opcional en la WiFi y 429 ante peticiones solapadas.
 - **Integración verificada** — un test replica byte por byte el cliente de [RevScope](https://github.com/santiquiroz/revscope) y obtiene respuestas del modelo local; ver [`docs/INTEGRACION-REVSCOPE.md`](docs/INTEGRACION-REVSCOPE.md).
 - **Tool calling** — los modelos 3B emiten llamadas a herramientas bien formadas on-device; ver [`docs/MODELOS.md`](docs/MODELOS.md).
 
-Siguiente: chequeo de compatibilidad del dispositivo (semáforo antes de descargar) y descarga de modelos desde Hugging Face dentro de la app.
+Siguiente: descarga de modelos desde Hugging Face dentro de la app, con el semáforo mostrándose antes de bajar nada.
 
 Kickoff y plan: [`docs/KICKOFF.md`](docs/KICKOFF.md) · [`docs/plans/`](docs/plans/)
 
