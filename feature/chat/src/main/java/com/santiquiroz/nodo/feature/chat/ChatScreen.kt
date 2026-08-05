@@ -2,6 +2,9 @@ package com.santiquiroz.nodo.feature.chat
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,6 +43,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.santiquiroz.nodo.core.inference.ChatMessage
 import com.santiquiroz.nodo.core.inference.EngineState
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ChatScreen(viewModel: ChatViewModel = hiltViewModel()) {
     val estado by viewModel.uiState.collectAsStateWithLifecycle()
@@ -47,6 +51,14 @@ fun ChatScreen(viewModel: ChatViewModel = hiltViewModel()) {
 
     LaunchedEffect(estado.messages.size, (estado.messages.lastOrNull()?.content?.length ?: 0)) {
         if (estado.messages.isNotEmpty()) listState.animateScrollToItem(estado.messages.lastIndex)
+    }
+
+    // Al abrir el teclado la lista se encoge: sin esto el último mensaje queda fuera de vista
+    val tecladoVisible = WindowInsets.isImeVisible
+    LaunchedEffect(tecladoVisible) {
+        if (tecladoVisible && estado.messages.isNotEmpty()) {
+            listState.animateScrollToItem(estado.messages.lastIndex)
+        }
     }
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {

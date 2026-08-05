@@ -1,5 +1,6 @@
 package com.santiquiroz.nodo.ui.nav
 
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
@@ -41,6 +42,8 @@ fun NodoNavHost() {
     val rutaActual = backStack?.destination?.route
 
     Scaffold(
+        // Sin esto la ventana edge-to-edge no cede espacio al teclado y el chat se sale de pantalla
+        modifier = Modifier.imePadding(),
         bottomBar = {
             NavigationBar {
                 destinos.forEach { destino ->
