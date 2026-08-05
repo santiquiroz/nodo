@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.santiquiroz.nodo.core.inference.ChatMessage
+import com.santiquiroz.nodo.core.inference.EngineConfig
 import com.santiquiroz.nodo.core.inference.EngineState
 import com.santiquiroz.nodo.core.inference.GenerationEvent
 import com.santiquiroz.nodo.core.inference.GenerationParams
@@ -58,6 +59,33 @@ class LlamaEngineSmokeTest {
             assertTrue("Respuesta vacía para ${modelo.name}", respuesta.isNotEmpty())
             assertNotNull("Sin stats para ${modelo.name}", stats)
         }
+        engine.unload()
+    }
+
+    @Test
+    fun contextoAgotadoSeReportaComoFalloNoComoExito() = runBlocking {
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val modelo = ctx.getExternalFilesDir("models")
+            ?.listFiles { f -> f.isFile && f.name.endsWith(".gguf") }
+            ?.minByOrNull { it.length() }
+        assertNotNull("No hay GGUF para la prueba de contexto", modelo)
+
+        val engine = LlamaCppEngine()
+        engine.load(modelo!!.absolutePath, EngineConfig(contextLength = 128, threads = 4))
+        assertTrue("Carga falló: ${engine.state.value}", engine.state.value is EngineState.Ready)
+
+        val eventos = mutableListOf<GenerationEvent>()
+        engine.generate(
+            listOf(ChatMessage(ChatMessage.Role.USER, "Escribe un ensayo largo sobre la historia del teléfono.")),
+            GenerationParams(maxTokens = 512),
+        ).collect { eventos.add(it) }
+
+        val ultimo = eventos.last()
+        Log.i("NodoBench", "contexto agotado → evento final=$ultimo")
+        assertTrue(
+            "Se esperaba Failure por contexto agotado, llegó $ultimo",
+            ultimo is GenerationEvent.Failure,
+        )
         engine.unload()
     }
 }
