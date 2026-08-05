@@ -7,7 +7,7 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.flow.Flow
 
 /** De dónde saca Nodo los resultados cuando la búsqueda web está activa. */
-enum class BuscadorConfigurado { SEARXNG, BRAVE }
+enum class BuscadorConfigurado { SERPER, GEMINI, SEARXNG, BRAVE }
 
 /**
  * Contrato de los ajustes. Existe para que los ViewModels no dependan de DataStore
@@ -25,6 +25,8 @@ interface Preferencias {
     suspend fun guardarBuscador(buscador: BuscadorConfigurado)
     suspend fun guardarSearxngUrl(url: String)
     suspend fun guardarBraveApiKey(clave: String)
+    suspend fun guardarSerperApiKey(clave: String)
+    suspend fun guardarGeminiApiKey(clave: String)
 }
 
 @Module

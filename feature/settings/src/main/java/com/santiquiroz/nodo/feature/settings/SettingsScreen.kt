@@ -2,6 +2,7 @@ package com.santiquiroz.nodo.feature.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -33,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.santiquiroz.nodo.core.settings.Ajustes
 import com.santiquiroz.nodo.core.settings.BuscadorConfigurado
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
     val estado by viewModel.uiState.collectAsStateWithLifecycle()
@@ -141,6 +143,7 @@ private fun SeccionMotor(ajustes: Ajustes, viewModel: SettingsViewModel) {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun SeccionBusqueda(ajustes: Ajustes, viewModel: SettingsViewModel) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -161,44 +164,83 @@ private fun SeccionBusqueda(ajustes: Ajustes, viewModel: SettingsViewModel) {
 
         if (!ajustes.busquedaWebActiva) return@Column
 
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            FilterChip(
-                selected = ajustes.buscador == BuscadorConfigurado.SEARXNG,
-                onClick = { viewModel.onBuscadorChange(BuscadorConfigurado.SEARXNG) },
-                label = { Text("SearXNG propio") },
-            )
-            FilterChip(
-                selected = ajustes.buscador == BuscadorConfigurado.BRAVE,
-                onClick = { viewModel.onBuscadorChange(BuscadorConfigurado.BRAVE) },
-                label = { Text("Brave Search") },
-            )
+        Text("De dónde salen los resultados", style = MaterialTheme.typography.labelMedium)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            OpcionDeBuscador(ajustes, BuscadorConfigurado.SERPER, "Google", viewModel)
+            OpcionDeBuscador(ajustes, BuscadorConfigurado.GEMINI, "Gemini", viewModel)
+            OpcionDeBuscador(ajustes, BuscadorConfigurado.SEARXNG, "SearXNG propio", viewModel)
+            OpcionDeBuscador(ajustes, BuscadorConfigurado.BRAVE, "Brave", viewModel)
         }
 
         when (ajustes.buscador) {
-            BuscadorConfigurado.SEARXNG -> {
-                OutlinedTextField(
-                    value = ajustes.searxngUrl,
-                    onValueChange = viewModel::onSearxngUrlChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("URL de tu SearXNG") },
-                    placeholder = { Text("http://192.168.1.10:8888") },
-                    singleLine = true,
-                    supportingText = { Text("Tu instancia debe tener habilitado el formato JSON") },
-                )
-            }
-            BuscadorConfigurado.BRAVE -> {
-                OutlinedTextField(
-                    value = ajustes.braveApiKey,
-                    onValueChange = viewModel::onBraveKeyChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("API key de Brave Search") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    supportingText = { Text("2.000 consultas al mes en el plan gratuito") },
-                )
-            }
+            BuscadorConfigurado.SERPER -> CampoDeBuscador(
+                valor = ajustes.serperApiKey,
+                onChange = viewModel::onSerperKeyChange,
+                etiqueta = "API key de Serper",
+                ayuda = "Resultados reales de google.com. 2.500 búsquedas gratis al registrarte " +
+                    "en serper.dev, después alrededor de un dólar por mil.",
+            )
+            BuscadorConfigurado.GEMINI -> CampoDeBuscador(
+                valor = ajustes.geminiApiKey,
+                onChange = viewModel::onGeminiKeyChange,
+                etiqueta = "API key de Gemini",
+                ayuda = "La mejor calidad para preguntas del día: Google responde ya sintetizado " +
+                    "y el modelo local solo redacta. 5.000 búsquedas gratis al mes. Ojo: en el plan " +
+                    "gratuito Google usa tus consultas para mejorar sus productos.",
+            )
+            BuscadorConfigurado.SEARXNG -> CampoDeBuscador(
+                valor = ajustes.searxngUrl,
+                onChange = viewModel::onSearxngUrlChange,
+                etiqueta = "URL de tu SearXNG",
+                ayuda = "La opción más privada: sin claves ni terceros. Tu instancia debe tener " +
+                    "habilitado el formato JSON.",
+                enmascarar = false,
+                marcador = "http://192.168.1.10:8888",
+            )
+            BuscadorConfigurado.BRAVE -> CampoDeBuscador(
+                valor = ajustes.braveApiKey,
+                onChange = viewModel::onBraveKeyChange,
+                etiqueta = "API key de Brave Search",
+                ayuda = "Índice propio, independiente de Google. Ya no tiene plan gratuito: " +
+                    "hoy exige tarjeta y factura por consulta.",
+            )
         }
     }
+}
+
+@Composable
+private fun OpcionDeBuscador(
+    ajustes: Ajustes,
+    cual: BuscadorConfigurado,
+    etiqueta: String,
+    viewModel: SettingsViewModel,
+) {
+    FilterChip(
+        selected = ajustes.buscador == cual,
+        onClick = { viewModel.onBuscadorChange(cual) },
+        label = { Text(etiqueta) },
+    )
+}
+
+@Composable
+private fun CampoDeBuscador(
+    valor: String,
+    onChange: (String) -> Unit,
+    etiqueta: String,
+    ayuda: String,
+    enmascarar: Boolean = true,
+    marcador: String? = null,
+) {
+    OutlinedTextField(
+        value = valor,
+        onValueChange = onChange,
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text(etiqueta) },
+        placeholder = marcador?.let { { Text(it) } },
+        singleLine = true,
+        visualTransformation = if (enmascarar) PasswordVisualTransformation() else VisualTransformation.None,
+        supportingText = { Text(ayuda) },
+    )
 }
 
 @Composable

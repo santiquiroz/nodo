@@ -27,9 +27,11 @@ data class Ajustes(
     val contexto: Int = CONTEXTO_POR_DEFECTO,
     val hilos: Int = HILOS_POR_DEFECTO,
     val busquedaWebActiva: Boolean = false,
-    val buscador: BuscadorConfigurado = BuscadorConfigurado.SEARXNG,
+    val buscador: BuscadorConfigurado = BuscadorConfigurado.SERPER,
     val searxngUrl: String = "",
     val braveApiKey: String = "",
+    val serperApiKey: String = "",
+    val geminiApiKey: String = "",
 ) {
     companion object {
         const val PUERTO_POR_DEFECTO = 8080
@@ -62,6 +64,8 @@ class NodoPreferences @Inject constructor(
     private val claveBuscador = stringPreferencesKey("buscador")
     private val claveSearxng = stringPreferencesKey("searxng_url")
     private val claveBrave = stringPreferencesKey("brave_api_key")
+    private val claveSerper = stringPreferencesKey("serper_api_key")
+    private val claveGemini = stringPreferencesKey("gemini_api_key")
 
     override val ajustes: Flow<Ajustes> = context.dataStore.data
         .catch { error ->
@@ -81,6 +85,8 @@ class NodoPreferences @Inject constructor(
                 } ?: BuscadorConfigurado.SEARXNG,
                 searxngUrl = prefs[claveSearxng].orEmpty(),
                 braveApiKey = prefs[claveBrave].orEmpty(),
+                serperApiKey = prefs[claveSerper].orEmpty(),
+                geminiApiKey = prefs[claveGemini].orEmpty(),
             )
         }
 
@@ -111,6 +117,10 @@ class NodoPreferences @Inject constructor(
     override suspend fun guardarSearxngUrl(url: String) = editar { it[claveSearxng] = url.trim() }
 
     override suspend fun guardarBraveApiKey(clave: String) = editar { it[claveBrave] = clave.trim() }
+
+    override suspend fun guardarSerperApiKey(clave: String) = editar { it[claveSerper] = clave.trim() }
+
+    override suspend fun guardarGeminiApiKey(clave: String) = editar { it[claveGemini] = clave.trim() }
 
     private suspend fun editar(cambio: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         context.dataStore.edit(cambio)

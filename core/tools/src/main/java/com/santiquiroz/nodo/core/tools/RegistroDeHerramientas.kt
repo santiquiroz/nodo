@@ -20,16 +20,20 @@ class RegistroDeHerramientas @Inject constructor(
     suspend fun disponibles(): List<Herramienta> {
         val ajustes = preferencias.actuales()
         if (!ajustes.busquedaWebActiva) return emptyList()
-        val buscador = construirBuscador(ajustes.buscador, ajustes.searxngUrl, ajustes.braveApiKey)
+        val buscador = construirBuscador(ajustes)
             ?: return emptyList()
         return listOf(HerramientaDeBusqueda(buscador))
     }
 
     suspend fun buscar(nombre: String): Herramienta? = disponibles().firstOrNull { it.definicion.nombre == nombre }
 
-    private fun construirBuscador(cual: BuscadorConfigurado, searxngUrl: String, braveKey: String): BuscadorWeb? =
-        when (cual) {
-            BuscadorConfigurado.SEARXNG -> searxngUrl.takeIf { it.isNotBlank() }?.let { BuscadorSearxng(it) }
-            BuscadorConfigurado.BRAVE -> braveKey.takeIf { it.isNotBlank() }?.let { BuscadorBrave(it) }
+    private fun construirBuscador(ajustes: com.santiquiroz.nodo.core.settings.Ajustes): BuscadorWeb? =
+        when (ajustes.buscador) {
+            BuscadorConfigurado.SERPER -> ajustes.serperApiKey.sinoNulo()?.let { BuscadorSerper(it) }
+            BuscadorConfigurado.GEMINI -> ajustes.geminiApiKey.sinoNulo()?.let { BuscadorGemini(it) }
+            BuscadorConfigurado.SEARXNG -> ajustes.searxngUrl.sinoNulo()?.let { BuscadorSearxng(it) }
+            BuscadorConfigurado.BRAVE -> ajustes.braveApiKey.sinoNulo()?.let { BuscadorBrave(it) }
         }
+
+    private fun String.sinoNulo(): String? = takeIf { it.isNotBlank() }
 }

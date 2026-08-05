@@ -86,16 +86,56 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun onBuscadorChange(buscador: BuscadorConfigurado) {
-        viewModelScope.launch { preferencias.guardarBuscador(buscador) }
+        viewModelScope.launch {
+            preferencias.guardarBuscador(buscador)
+            activarSiQuedoUsable()
+        }
     }
 
     fun onSearxngUrlChange(url: String) {
         _uiState.update { it.copy(ajustes = it.ajustes.copy(searxngUrl = url)) }
-        viewModelScope.launch { preferencias.guardarSearxngUrl(url) }
+        viewModelScope.launch {
+            preferencias.guardarSearxngUrl(url)
+            activarSiQuedoUsable()
+        }
+    }
+
+    fun onSerperKeyChange(clave: String) {
+        _uiState.update { it.copy(ajustes = it.ajustes.copy(serperApiKey = clave)) }
+        viewModelScope.launch {
+            preferencias.guardarSerperApiKey(clave)
+            activarSiQuedoUsable()
+        }
+    }
+
+    fun onGeminiKeyChange(clave: String) {
+        _uiState.update { it.copy(ajustes = it.ajustes.copy(geminiApiKey = clave)) }
+        viewModelScope.launch {
+            preferencias.guardarGeminiApiKey(clave)
+            activarSiQuedoUsable()
+        }
     }
 
     fun onBraveKeyChange(clave: String) {
         _uiState.update { it.copy(ajustes = it.ajustes.copy(braveApiKey = clave)) }
-        viewModelScope.launch { preferencias.guardarBraveApiKey(clave) }
+        viewModelScope.launch {
+            preferencias.guardarBraveApiKey(clave)
+            activarSiQuedoUsable()
+        }
+    }
+
+    /**
+     * Configurar un buscador ya es decir que sí: no tiene sentido pedir además un
+     * interruptor, ni dejar la búsqueda encendida cuando no hay dónde buscar.
+     */
+    private suspend fun activarSiQuedoUsable() {
+        val ajustes = preferencias.actuales()
+        val usable = when (ajustes.buscador) {
+            BuscadorConfigurado.SERPER -> ajustes.serperApiKey.isNotBlank()
+            BuscadorConfigurado.GEMINI -> ajustes.geminiApiKey.isNotBlank()
+            BuscadorConfigurado.SEARXNG -> ajustes.searxngUrl.isNotBlank()
+            BuscadorConfigurado.BRAVE -> ajustes.braveApiKey.isNotBlank()
+        }
+        if (usable != ajustes.busquedaWebActiva) preferencias.guardarBusquedaWebActiva(usable)
     }
 }

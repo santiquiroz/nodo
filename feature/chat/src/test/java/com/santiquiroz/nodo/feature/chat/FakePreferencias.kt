@@ -45,4 +45,12 @@ class FakePreferencias(inicial: Ajustes = Ajustes()) : Preferencias {
     override suspend fun guardarBraveApiKey(clave: String) {
         estado.value = estado.value.copy(braveApiKey = clave)
     }
+
+    override suspend fun guardarSerperApiKey(clave: String) {
+        estado.value = estado.value.copy(serperApiKey = clave)
+    }
+
+    override suspend fun guardarGeminiApiKey(clave: String) {
+        estado.value = estado.value.copy(geminiApiKey = clave)
+    }
 }
