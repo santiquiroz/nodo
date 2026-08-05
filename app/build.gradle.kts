@@ -17,6 +17,7 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         ndk { abiFilters += "arm64-v8a" }
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
         release {
@@ -46,4 +47,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+    androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.kotlinx.coroutines.core)
 }
