@@ -26,6 +26,10 @@ data class Ajustes(
     val exponerEnLan: Boolean = false,
     val contexto: Int = CONTEXTO_POR_DEFECTO,
     val hilos: Int = HILOS_POR_DEFECTO,
+    val busquedaWebActiva: Boolean = false,
+    val buscador: BuscadorConfigurado = BuscadorConfigurado.SEARXNG,
+    val searxngUrl: String = "",
+    val braveApiKey: String = "",
 ) {
     companion object {
         const val PUERTO_POR_DEFECTO = 8080
@@ -54,6 +58,10 @@ class NodoPreferences @Inject constructor(
     private val claveLan = booleanPreferencesKey("exponer_en_lan")
     private val claveContexto = intPreferencesKey("contexto")
     private val claveHilos = intPreferencesKey("hilos")
+    private val claveBusqueda = booleanPreferencesKey("busqueda_web_activa")
+    private val claveBuscador = stringPreferencesKey("buscador")
+    private val claveSearxng = stringPreferencesKey("searxng_url")
+    private val claveBrave = stringPreferencesKey("brave_api_key")
 
     override val ajustes: Flow<Ajustes> = context.dataStore.data
         .catch { error ->
@@ -67,6 +75,12 @@ class NodoPreferences @Inject constructor(
                 exponerEnLan = prefs[claveLan] ?: false,
                 contexto = prefs[claveContexto]?.takeIf { it > 0 } ?: Ajustes.CONTEXTO_POR_DEFECTO,
                 hilos = prefs[claveHilos]?.takeIf { it in Ajustes.HILOS_VALIDOS } ?: Ajustes.HILOS_POR_DEFECTO,
+                busquedaWebActiva = prefs[claveBusqueda] ?: false,
+                buscador = prefs[claveBuscador]?.let { nombre ->
+                    BuscadorConfigurado.entries.firstOrNull { it.name == nombre }
+                } ?: BuscadorConfigurado.SEARXNG,
+                searxngUrl = prefs[claveSearxng].orEmpty(),
+                braveApiKey = prefs[claveBrave].orEmpty(),
             )
         }
 
@@ -87,6 +101,16 @@ class NodoPreferences @Inject constructor(
     override suspend fun guardarHilos(hilos: Int) = editar {
         if (hilos in Ajustes.HILOS_VALIDOS) it[claveHilos] = hilos
     }
+
+    override suspend fun guardarBusquedaWebActiva(activa: Boolean) = editar { it[claveBusqueda] = activa }
+
+    override suspend fun guardarBuscador(buscador: BuscadorConfigurado) = editar {
+        it[claveBuscador] = buscador.name
+    }
+
+    override suspend fun guardarSearxngUrl(url: String) = editar { it[claveSearxng] = url.trim() }
+
+    override suspend fun guardarBraveApiKey(clave: String) = editar { it[claveBrave] = clave.trim() }
 
     private suspend fun editar(cambio: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         context.dataStore.edit(cambio)

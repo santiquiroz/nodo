@@ -12,6 +12,7 @@ import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonEncoder
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -56,10 +57,39 @@ data class ChatCompletionRequest(
     val temperature: Float? = null,
     @SerialName("top_p") val topP: Float? = null,
     val stream: Boolean = false,
+    val tools: List<ToolDto> = emptyList(),
+    @SerialName("tool_choice") val toolChoice: JsonElement? = null,
 )
 
 @Serializable
-data class WireMessage(val role: String, val content: TextoDelMensaje = TextoDelMensaje(""))
+data class ToolDto(val type: String = "function", val function: FunctionDto)
+
+@Serializable
+data class FunctionDto(
+    val name: String,
+    val description: String = "",
+    val parameters: JsonObject = JsonObject(emptyMap()),
+)
+
+@Serializable
+data class ToolCallDto(
+    val id: String,
+    val type: String = "function",
+    val function: FunctionCallDto,
+)
+
+/** `arguments` viaja como STRING de JSON, no como objeto: así lo define OpenAI. */
+@Serializable
+data class FunctionCallDto(val name: String, val arguments: String)
+
+@Serializable
+data class WireMessage(
+    val role: String,
+    val content: TextoDelMensaje = TextoDelMensaje(""),
+    @SerialName("tool_calls") val toolCalls: List<ToolCallDto> = emptyList(),
+    @SerialName("tool_call_id") val toolCallId: String? = null,
+    val name: String? = null,
+)
 
 @Serializable
 data class ChatCompletionResponse(
@@ -103,7 +133,11 @@ data class ChunkChoice(
 )
 
 @Serializable
-data class Delta(val role: String? = null, val content: String? = null)
+data class Delta(
+    val role: String? = null,
+    val content: String? = null,
+    @SerialName("tool_calls") val toolCalls: List<ToolCallDto> = emptyList(),
+)
 
 @Serializable
 data class ModelsResponse(val `object`: String = "list", val data: List<ModelCard>)

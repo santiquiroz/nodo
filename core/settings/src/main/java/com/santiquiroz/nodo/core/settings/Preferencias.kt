@@ -6,6 +6,9 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.flow.Flow
 
+/** De dónde saca Nodo los resultados cuando la búsqueda web está activa. */
+enum class BuscadorConfigurado { SEARXNG, BRAVE }
+
 /**
  * Contrato de los ajustes. Existe para que los ViewModels no dependan de DataStore
  * y se puedan probar con un doble en memoria.
@@ -18,6 +21,10 @@ interface Preferencias {
     suspend fun guardarExponerEnLan(activo: Boolean)
     suspend fun guardarContexto(contexto: Int)
     suspend fun guardarHilos(hilos: Int)
+    suspend fun guardarBusquedaWebActiva(activa: Boolean)
+    suspend fun guardarBuscador(buscador: BuscadorConfigurado)
+    suspend fun guardarSearxngUrl(url: String)
+    suspend fun guardarBraveApiKey(clave: String)
 }
 
 @Module

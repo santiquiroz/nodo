@@ -54,6 +54,8 @@ dependencies {
     implementation(project(":feature:chat"))
     implementation(project(":core:models"))
     implementation(project(":core:settings"))
+    implementation(project(":core:tools"))
+    implementation(libs.kotlinx.serialization.json)
     implementation(project(":feature:settings"))
     implementation(project(":feature:explore"))
     implementation(project(":feature:models"))

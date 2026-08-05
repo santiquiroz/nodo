@@ -3,6 +3,7 @@ package com.santiquiroz.nodo.feature.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.santiquiroz.nodo.core.settings.Ajustes
+import com.santiquiroz.nodo.core.settings.BuscadorConfigurado
 import com.santiquiroz.nodo.core.settings.Preferencias
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -78,5 +79,23 @@ class SettingsViewModel @Inject constructor(
 
     fun onHilosChange(hilos: Int) {
         viewModelScope.launch { preferencias.guardarHilos(hilos) }
+    }
+
+    fun onBusquedaWebChange(activa: Boolean) {
+        viewModelScope.launch { preferencias.guardarBusquedaWebActiva(activa) }
+    }
+
+    fun onBuscadorChange(buscador: BuscadorConfigurado) {
+        viewModelScope.launch { preferencias.guardarBuscador(buscador) }
+    }
+
+    fun onSearxngUrlChange(url: String) {
+        _uiState.update { it.copy(ajustes = it.ajustes.copy(searxngUrl = url)) }
+        viewModelScope.launch { preferencias.guardarSearxngUrl(url) }
+    }
+
+    fun onBraveKeyChange(clave: String) {
+        _uiState.update { it.copy(ajustes = it.ajustes.copy(braveApiKey = clave)) }
+        viewModelScope.launch { preferencias.guardarBraveApiKey(clave) }
     }
 }

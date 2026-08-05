@@ -14,6 +14,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -21,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -29,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.santiquiroz.nodo.core.settings.Ajustes
+import com.santiquiroz.nodo.core.settings.BuscadorConfigurado
 
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
@@ -43,6 +46,8 @@ fun SettingsScreen(viewModel: SettingsViewModel = hiltViewModel()) {
         SeccionServidor(estado, viewModel)
         HorizontalDivider()
         SeccionMotor(estado.ajustes, viewModel)
+        HorizontalDivider()
+        SeccionBusqueda(estado.ajustes, viewModel)
         HorizontalDivider()
         AcercaDe()
     }
@@ -133,6 +138,66 @@ private fun SeccionMotor(ajustes: Ajustes, viewModel: SettingsViewModel) {
             }
         }
         Explicacion("Más hilos no siempre es más rápido: los núcleos de eficiencia frenan al resto.")
+    }
+}
+
+@Composable
+private fun SeccionBusqueda(ajustes: Ajustes, viewModel: SettingsViewModel) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Titulo("Búsqueda web")
+        Explicacion(
+            "Deja que el modelo consulte internet cuando la pregunta dependa de datos que " +
+                "cambian. Es lo único en Nodo que envía algo fuera del teléfono: solo se manda " +
+                "la consulta de búsqueda al servicio que elijas, nunca la conversación completa.",
+        )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Permitir búsqueda web", style = MaterialTheme.typography.bodyMedium)
+            Switch(checked = ajustes.busquedaWebActiva, onCheckedChange = viewModel::onBusquedaWebChange)
+        }
+
+        if (!ajustes.busquedaWebActiva) return@Column
+
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FilterChip(
+                selected = ajustes.buscador == BuscadorConfigurado.SEARXNG,
+                onClick = { viewModel.onBuscadorChange(BuscadorConfigurado.SEARXNG) },
+                label = { Text("SearXNG propio") },
+            )
+            FilterChip(
+                selected = ajustes.buscador == BuscadorConfigurado.BRAVE,
+                onClick = { viewModel.onBuscadorChange(BuscadorConfigurado.BRAVE) },
+                label = { Text("Brave Search") },
+            )
+        }
+
+        when (ajustes.buscador) {
+            BuscadorConfigurado.SEARXNG -> {
+                OutlinedTextField(
+                    value = ajustes.searxngUrl,
+                    onValueChange = viewModel::onSearxngUrlChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("URL de tu SearXNG") },
+                    placeholder = { Text("http://192.168.1.10:8888") },
+                    singleLine = true,
+                    supportingText = { Text("Tu instancia debe tener habilitado el formato JSON") },
+                )
+            }
+            BuscadorConfigurado.BRAVE -> {
+                OutlinedTextField(
+                    value = ajustes.braveApiKey,
+                    onValueChange = viewModel::onBraveKeyChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("API key de Brave Search") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    supportingText = { Text("2.000 consultas al mes en el plan gratuito") },
+                )
+            }
+        }
     }
 }
 

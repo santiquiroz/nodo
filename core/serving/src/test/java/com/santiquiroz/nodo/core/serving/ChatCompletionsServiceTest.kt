@@ -3,6 +3,7 @@ package com.santiquiroz.nodo.core.serving
 import com.santiquiroz.nodo.core.inference.ChatMessage
 import com.santiquiroz.nodo.core.inference.FinishReason
 import kotlinx.coroutines.flow.first
+import kotlinx.serialization.json.JsonObject as JsonObj
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -78,9 +79,17 @@ class ChatCompletionsServiceTest {
 
     @Test
     fun `un rol desconocido se descarta en vez de reventar`() = runTest {
-        resultadoDe(peticion(listOf(WireMessage("tool", texto("ignorado")), WireMessage("user", texto("hola")))))
+        resultadoDe(peticion(listOf(WireMessage("inventado", texto("ignorado")), WireMessage("user", texto("hola")))))
         assertEquals(1, engine.ultimosMensajes.size)
         assertEquals(ChatMessage.Role.USER, engine.ultimosMensajes[0].role)
+    }
+
+    @Test
+    fun `el rol tool viaja como turno de usuario, que es lo que espera la plantilla`() = runTest {
+        resultadoDe(peticion(listOf(WireMessage("tool", texto("28 grados")), WireMessage("user", texto("¿y mañana?")))))
+        assertEquals(2, engine.ultimosMensajes.size)
+        assertEquals(ChatMessage.Role.USER, engine.ultimosMensajes[0].role)
+        assertTrue(engine.ultimosMensajes[0].content.contains("<tool_response>"))
     }
 
     @Test
@@ -160,5 +169,142 @@ class ChatCompletionsServiceTest {
     fun `un turno con contenido vacio no llega al motor`() = runTest {
         resultadoDe(peticion(listOf(WireMessage("assistant", texto("")), WireMessage("user", texto("hola")))))
         assertEquals(1, engine.ultimosMensajes.size)
+    }
+
+    // --- Tool calling ---
+
+    private val herramientaFalsa = object : com.santiquiroz.nodo.core.tools.Herramienta {
+        var vecesEjecutada = 0
+        var respuesta = "28 grados y despejado"
+        override val definicion = com.santiquiroz.nodo.core.tools.DefinicionDeHerramienta(
+            nombre = "buscar_web",
+            descripcion = "busca",
+            parametros = json.decodeFromString(JsonObj.serializer(), """{"type":"object"}"""),
+        )
+
+        override suspend fun ejecutar(argumentosJson: String): String {
+            vecesEjecutada++
+            return respuesta
+        }
+    }
+
+    private fun conHerramientaPropia() = ChatCompletionsService(
+        engine,
+        herramientasPropias = { listOf(herramientaFalsa) },
+        reloj = { 1_700_000_000_000 },
+        generarId = { "chatcmpl-fijo" },
+    )
+
+    private fun peticionConTools() = ChatCompletionRequest(
+        model = "x",
+        messages = listOf(WireMessage("user", texto("¿qué temperatura hace?"))),
+        tools = listOf(
+            ToolDto(
+                function = FunctionDto(
+                    name = "buscar_web",
+                    description = "Busca en internet",
+                    parameters = json.decodeFromString(JsonObj.serializer(), """{"type":"object"}"""),
+                ),
+            ),
+        ),
+    )
+
+    @Test
+    fun `las herramientas del cliente se inyectan en el mensaje de sistema`() = runTest {
+        resultadoDe(peticionConTools())
+        val sistema = engine.ultimosMensajes.first()
+        assertEquals(ChatMessage.Role.SYSTEM, sistema.role)
+        assertTrue("Falta el bloque de tools: ${sistema.content}", sistema.content.contains("<tools>"))
+        assertTrue(sistema.content.contains("buscar_web"))
+    }
+
+    @Test
+    fun `si el modelo pide una herramienta del cliente, se le devuelve tool_calls`() = runTest {
+        engine.piezas = listOf("""<tool_call>{"name":"buscar_web","arguments":{"consulta":"clima"}}</tool_call>""")
+        val ok = resultadoDe(peticionConTools()) as CompletionResult.Ok
+        val eleccion = ok.respuesta.choices[0]
+        assertEquals("tool_calls", eleccion.finishReason)
+        assertEquals("buscar_web", eleccion.message.toolCalls.single().function.name)
+        assertTrue(eleccion.message.toolCalls.single().function.arguments.contains("clima"))
+    }
+
+    @Test
+    fun `Nodo no ejecuta las herramientas del cliente, se las devuelve`() = runTest {
+        engine.piezas = listOf("""<tool_call>{"name":"buscar_web","arguments":{}}</tool_call>""")
+        val servicio = conHerramientaPropia()
+        servicio.generar(peticionConTools()).first()
+        assertEquals("No debía ejecutarla: es del cliente", 0, herramientaFalsa.vecesEjecutada)
+    }
+
+    @Test
+    fun `con herramienta propia Nodo la ejecuta y sigue la conversacion solo`() = runTest {
+        val servicio = conHerramientaPropia()
+        engine.respuestasPorTurno = listOf(
+            """<tool_call>{"name":"buscar_web","arguments":{"consulta":"clima"}}</tool_call>""",
+            "Hacen 28 grados y está despejado.",
+        )
+        val resultado = servicio.generar(
+            ChatCompletionRequest(model = "x", messages = listOf(WireMessage("user", texto("¿qué temperatura hace?")))),
+        ).first()
+        val ok = resultado as CompletionResult.Ok
+        assertEquals(1, herramientaFalsa.vecesEjecutada)
+        assertEquals("Hacen 28 grados y está despejado.", ok.respuesta.choices[0].message.content.texto)
+        assertEquals("stop", ok.respuesta.choices[0].finishReason)
+    }
+
+    @Test
+    fun `el resultado de la herramienta llega al modelo envuelto en tool_response`() = runTest {
+        val servicio = conHerramientaPropia()
+        engine.respuestasPorTurno = listOf(
+            """<tool_call>{"name":"buscar_web","arguments":{}}</tool_call>""",
+            "listo",
+        )
+        servicio.generar(
+            ChatCompletionRequest(model = "x", messages = listOf(WireMessage("user", texto("hola")))),
+        ).first()
+        val ultimo = engine.ultimosMensajes.last()
+        assertTrue("Se esperaba tool_response: ${ultimo.content}", ultimo.content.contains("<tool_response>"))
+        assertTrue(ultimo.content.contains("28 grados"))
+    }
+
+    @Test
+    fun `una herramienta inexistente se le explica al modelo en vez de reventar`() = runTest {
+        val servicio = conHerramientaPropia()
+        engine.respuestasPorTurno = listOf(
+            """<tool_call>{"name":"no_existe","arguments":{}}</tool_call>""",
+            "no pude",
+        )
+        val resultado = servicio.generar(
+            ChatCompletionRequest(model = "x", messages = listOf(WireMessage("user", texto("hola")))),
+        ).first()
+        assertTrue(resultado is CompletionResult.Ok)
+        assertTrue(engine.ultimosMensajes.last().content.contains("no existe"))
+    }
+
+    @Test
+    fun `un turno del historial con tool_calls se re-emite en el formato del modelo`() = runTest {
+        resultadoDe(
+            ChatCompletionRequest(
+                model = "x",
+                messages = listOf(
+                    WireMessage("user", texto("¿clima?")),
+                    WireMessage(
+                        role = "assistant",
+                        toolCalls = listOf(ToolCallDto(id = "c1", function = FunctionCallDto("buscar_web", """{"consulta":"clima"}"""))),
+                    ),
+                    WireMessage(role = "tool", content = texto("28 grados"), toolCallId = "c1"),
+                ),
+            ),
+        )
+        val roles = engine.ultimosMensajes.map { it.role }
+        assertTrue(roles.contains(ChatMessage.Role.ASSISTANT))
+        assertTrue(engine.ultimosMensajes.any { it.content.contains("<tool_call>") })
+        assertTrue(engine.ultimosMensajes.any { it.content.contains("<tool_response>") })
+    }
+
+    @Test
+    fun `sin herramientas el prompt no se ensucia`() = runTest {
+        resultadoDe(peticion())
+        assertTrue(engine.ultimosMensajes.none { it.content.contains("<tools>") })
     }
 }

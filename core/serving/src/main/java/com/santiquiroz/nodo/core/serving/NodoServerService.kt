@@ -13,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import com.santiquiroz.nodo.core.inference.EngineConfig
 import com.santiquiroz.nodo.core.inference.InferenceEngine
 import com.santiquiroz.nodo.core.settings.Preferencias
+import com.santiquiroz.nodo.core.tools.RegistroDeHerramientas
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +47,9 @@ class NodoServerService : Service() {
 
     @Inject
     lateinit var preferencias: Preferencias
+
+    @Inject
+    lateinit var registroDeHerramientas: RegistroDeHerramientas
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var servidor: NodoHttpServer? = null
@@ -90,7 +94,10 @@ class NodoServerService : Service() {
 
         if (servidor == null) {
             val srv = NodoHttpServer(
-                service = ChatCompletionsService(engine),
+                service = ChatCompletionsService(
+                    engine = engine,
+                    herramientasPropias = { registroDeHerramientas.disponibles() },
+                ),
                 puerto = puerto,
                 soloLocalhost = !exponerEnLan,
                 token = token,
