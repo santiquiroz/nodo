@@ -5,8 +5,11 @@ local.properties
 *.apk
 *.aab
 .idea/
+*.iml
+.kotlin/
 # Modelos descargados (GB — nunca al repo)
 *.gguf
 *.litertlm
 *.task
-models/
+/models/
+/.modelos-prueba/
