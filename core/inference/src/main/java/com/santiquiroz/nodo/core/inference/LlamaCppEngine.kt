@@ -20,65 +20,111 @@ class LlamaCppEngine @Inject constructor() : InferenceEngine {
     // llama_context NO es thread-safe: todas las llamadas JNI confinadas a un solo hilo
     private val llamaDispatcher =
         Executors.newSingleThreadExecutor { r -> Thread(r, "nodo-llama") }.asCoroutineDispatcher()
+
+    // Serializa generate() contra load()/unload(): sin él, un free() se cuela entre dos next()
     private val singleFlight = Mutex()
 
+    // Pide al bucle de generación que corte ya, para no esperar hasta maxTokens por el candado
+    @Volatile
+    private var cancelacionPedida = false
+
     private var handle = 0L
-    private var config = EngineConfig()
 
     private val _state = MutableStateFlow<EngineState>(EngineState.Idle)
     override val state = _state.asStateFlow()
 
-    override suspend fun load(modelPath: String, config: EngineConfig) = withContext(llamaDispatcher) {
+    override suspend fun load(modelPath: String, config: EngineConfig) {
         val file = File(modelPath)
-        if (handle != 0L) {
-            LlamaNative.free(handle)
-            handle = 0L
-        }
         _state.value = EngineState.Loading(file.name)
-        this@LlamaCppEngine.config = config
-        val params = GenerationParams()
-        val h = LlamaNative.load(modelPath, config.contextLength, config.threads, params.temperature, params.minP)
-        _state.value = if (h == 0L) {
-            EngineState.Error("No se pudo cargar ${file.name}")
-        } else {
-            handle = h
-            EngineState.Ready(ModelInfo(file.name, modelPath, file.length()))
+        conSesionExclusiva {
+            liberarSesion()
+            val h = LlamaNative.load(modelPath, config.contextLength, config.threads)
+            _state.value = if (h == 0L) {
+                EngineState.Error("No se pudo cargar ${file.name}")
+            } else {
+                handle = h
+                EngineState.Ready(ModelInfo(file.name, modelPath, file.length()))
+            }
         }
     }
 
-    override suspend fun unload() = withContext(llamaDispatcher) {
-        if (handle != 0L) {
-            LlamaNative.free(handle)
-            handle = 0L
-        }
+    override suspend fun unload() = conSesionExclusiva {
+        liberarSesion()
         _state.value = EngineState.Idle
     }
 
     override fun generate(messages: List<ChatMessage>, params: GenerationParams): Flow<GenerationEvent> = flow {
         singleFlight.withLock {
+            cancelacionPedida = false
             if (handle == 0L) {
                 emit(GenerationEvent.Failure("No hay modelo cargado"))
                 return@withLock
             }
+            LlamaNative.setSampling(handle, params.temperature, params.minP)
             val prompt = formatearPrompt(messages)
             val inicio = System.nanoTime()
             val promptTokens = LlamaNative.start(handle, prompt)
             if (promptTokens < 0) {
-                emit(GenerationEvent.Failure("Fallo al procesar el prompt"))
+                emit(GenerationEvent.Failure(mensajeDeError(LlamaNative.lastStatus(handle))))
                 return@withLock
             }
             var generados = 0
             var primerTokenMs = 0L
+            var cortadaPorCancelacion = false
             while (generados < params.maxTokens) {
+                if (cancelacionPedida) {
+                    cortadaPorCancelacion = true
+                    break
+                }
                 val pieza = LlamaNative.next(handle) ?: break
                 generados++
                 if (primerTokenMs == 0L) primerTokenMs = (System.nanoTime() - inicio) / 1_000_000
                 if (pieza.isNotEmpty()) emit(GenerationEvent.Token(pieza))
             }
             val totalMs = (System.nanoTime() - inicio) / 1_000_000
-            emit(GenerationEvent.Done(GenerationStats(promptTokens, generados, primerTokenMs, totalMs)))
+            val estado = LlamaNative.lastStatus(handle)
+            when {
+                cortadaPorCancelacion -> emit(GenerationEvent.Failure("Generación cancelada"))
+                generados >= params.maxTokens ->
+                    emit(GenerationEvent.Done(estadisticas(promptTokens, generados, primerTokenMs, totalMs, FinishReason.LIMITE_TOKENS)))
+                estado == NodoStatus.FIN_NATURAL ->
+                    emit(GenerationEvent.Done(estadisticas(promptTokens, generados, primerTokenMs, totalMs, FinishReason.FIN_NATURAL)))
+                else -> emit(GenerationEvent.Failure(mensajeDeError(estado)))
+            }
         }
     }.flowOn(llamaDispatcher)
+
+    // load/unload piden el corte ANTES de esperar el candado: si no, quedan encolados hasta maxTokens
+    private suspend fun conSesionExclusiva(bloque: () -> Unit) {
+        cancelacionPedida = true
+        singleFlight.withLock {
+            withContext(llamaDispatcher) { bloque() }
+        }
+        cancelacionPedida = false
+    }
+
+    private fun liberarSesion() {
+        if (handle != 0L) {
+            LlamaNative.free(handle)
+            handle = 0L
+        }
+    }
+
+    private fun estadisticas(
+        promptTokens: Int,
+        generados: Int,
+        primerTokenMs: Long,
+        totalMs: Long,
+        razon: FinishReason,
+    ) = GenerationStats(promptTokens, generados, primerTokenMs, totalMs, razon)
+
+    private fun mensajeDeError(estado: Int): String = when (estado) {
+        NodoStatus.ERROR_CONTEXTO -> "Contexto agotado: la conversación no cabe en la ventana del modelo"
+        NodoStatus.ERROR_DECODE -> "Fallo de decodificación del modelo"
+        NodoStatus.ERROR_PROMPT -> "No se pudo tokenizar el prompt"
+        NodoStatus.ERROR_SESION -> "El modelo se descargó durante la generación"
+        else -> "Fallo desconocido del motor (estado $estado)"
+    }
 
     private fun formatearPrompt(messages: List<ChatMessage>): String {
         val roles = messages.map { it.role.wire }.toTypedArray()

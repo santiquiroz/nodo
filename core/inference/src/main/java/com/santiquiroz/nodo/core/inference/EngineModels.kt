@@ -17,11 +17,14 @@ data class ChatMessage(val role: Role, val content: String) {
 
 data class ModelInfo(val name: String, val path: String, val sizeBytes: Long)
 
+enum class FinishReason { FIN_NATURAL, LIMITE_TOKENS }
+
 data class GenerationStats(
     val promptTokens: Int,
     val generatedTokens: Int,
     val timeToFirstTokenMs: Long,
     val totalTimeMs: Long,
+    val finishReason: FinishReason = FinishReason.FIN_NATURAL,
 ) {
     val tokensPerSecond: Double
         get() = if (totalTimeMs > timeToFirstTokenMs && generatedTokens > 1)
