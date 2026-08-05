@@ -21,6 +21,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.santiquiroz.nodo.feature.chat.ChatScreen
 import com.santiquiroz.nodo.ui.screens.PlaceholderScreen
 
 data class Destino(val ruta: String, val titulo: String, val icono: ImageVector)
@@ -64,9 +65,11 @@ fun NodoNavHost() {
             startDestination = "modelos",
             modifier = Modifier.padding(padding),
         ) {
-            destinos.forEach { destino ->
-                composable(destino.ruta) { PlaceholderScreen(destino.titulo) }
-            }
+            composable("modelos") { PlaceholderScreen("Modelos") }
+            composable("explorar") { PlaceholderScreen("Explorar") }
+            composable("servidor") { PlaceholderScreen("Servidor") }
+            composable("chat") { ChatScreen() }
+            composable("ajustes") { PlaceholderScreen("Ajustes") }
         }
     }
 }
