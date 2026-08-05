@@ -30,6 +30,8 @@ Encaja en un ecosistema de varias apps: RevScope, y cualquier otra que quiera IA
 - **Integración verificada** — un test replica byte por byte el cliente de [RevScope](https://github.com/santiquiroz/revscope) y obtiene respuestas del modelo local; ver [`docs/INTEGRACION-REVSCOPE.md`](docs/INTEGRACION-REVSCOPE.md).
 - **Tool calling** — los modelos 3B emiten llamadas a herramientas bien formadas on-device; ver [`docs/MODELOS.md`](docs/MODELOS.md).
 
+- **Herramientas** — el endpoint acepta `tools` y devuelve `tool_calls` como OpenAI. Si el cliente manda sus herramientas, decide él; si no, Nodo puede usar las suyas y cerrar el bucle solo.
+- **Búsqueda web** — opcional y apagada por defecto, con tu propio SearXNG o Brave Search. Es lo único que envía algo fuera del teléfono, y solo la consulta.
 - **Ajustes** — token de Hugging Face para modelos restringidos, puerto del servidor, tamaño de contexto e hilos de CPU; todo persistente.
 
 Siguiente: icono propio y primer APK de release firmado. Como mejora de rendimiento pendiente está reusar el KV cache entre turnos, que hoy se recalcula entero en cada mensaje.
