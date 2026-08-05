@@ -1,0 +1,12 @@
+# Android / Gradle
+.gradle/
+build/
+local.properties
+*.apk
+*.aab
+.idea/
+# Modelos descargados (GB — nunca al repo)
+*.gguf
+*.litertlm
+*.task
+models/
