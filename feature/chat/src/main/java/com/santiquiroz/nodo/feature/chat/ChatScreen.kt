@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -72,6 +73,21 @@ fun ChatScreen(viewModel: ChatViewModel = hiltViewModel()) {
             items(estado.messages) { mensaje -> BurbujaMensaje(mensaje) }
         }
 
+        estado.actividad?.let { actividad ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(vertical = 4.dp),
+            ) {
+                CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                Text(
+                    actividad,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+
         estado.lastStats?.let { stats ->
             Text(
                 text = "%.1f tok/s · %d tokens · primer token %d ms".format(
@@ -91,7 +107,9 @@ fun ChatScreen(viewModel: ChatViewModel = hiltViewModel()) {
                 value = estado.input,
                 onValueChange = viewModel::onInputChange,
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("Escribe un mensaje…") },
+                placeholder = {
+                    Text(if (estado.herramientasActivas) "Pregunta algo, puedo buscar en la web…" else "Escribe un mensaje…")
+                },
                 enabled = estado.engineState is EngineState.Ready,
             )
             if (estado.isGenerating) {

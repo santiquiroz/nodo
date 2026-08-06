@@ -19,6 +19,7 @@ android {
 
 dependencies {
     implementation(project(":core:settings"))
+    implementation(project(":core:inference"))
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.hilt.android)

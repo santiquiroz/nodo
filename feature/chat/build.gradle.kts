@@ -21,6 +21,7 @@ android {
 dependencies {
     implementation(project(":core:inference"))
     implementation(project(":core:settings"))
+    implementation(project(":core:tools"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)

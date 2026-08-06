@@ -26,6 +26,7 @@ class ChatViewModelTest {
     private lateinit var engine: FakeInferenceEngine
     private lateinit var repo: ModelFilesRepository
     private val preferencias = FakePreferencias()
+    private val registro = com.santiquiroz.nodo.core.tools.RegistroDeHerramientas(preferencias)
 
     private val modeloA = ModelFile("tiny.gguf", "/models/tiny.gguf", 500L)
     private val modeloB = ModelFile("otro.gguf", "/models/otro.gguf", 900L)
@@ -44,7 +45,7 @@ class ChatViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun crearVm() = ChatViewModel(engine, repo, preferencias)
+    private fun crearVm() = ChatViewModel(engine, repo, preferencias, registro)
 
     private fun vmConModeloCargado(): ChatViewModel {
         val vm = crearVm()
@@ -172,7 +173,7 @@ class ChatViewModelTest {
         val repoRoto = object : ModelFilesRepository {
             override fun listar() = ModelosLocales.NoDisponible("No se pudo leer la carpeta de modelos")
         }
-        val vm = ChatViewModel(engine, repoRoto, preferencias)
+        val vm = ChatViewModel(engine, repoRoto, preferencias, registro)
         dispatcher.scheduler.advanceUntilIdle()
 
         assertEquals(emptyList<ModelFile>(), vm.uiState.value.availableModels)

@@ -6,10 +6,12 @@ import com.santiquiroz.nodo.core.inference.ChatMessage
 import com.santiquiroz.nodo.core.inference.EngineConfig
 import com.santiquiroz.nodo.core.inference.EngineState
 import com.santiquiroz.nodo.core.inference.FinishReason
-import com.santiquiroz.nodo.core.inference.GenerationEvent
 import com.santiquiroz.nodo.core.inference.GenerationStats
 import com.santiquiroz.nodo.core.inference.InferenceEngine
 import com.santiquiroz.nodo.core.settings.Preferencias
+import com.santiquiroz.nodo.core.tools.AgenteConHerramientas
+import com.santiquiroz.nodo.core.tools.EventoDeAgente
+import com.santiquiroz.nodo.core.tools.RegistroDeHerramientas
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +28,9 @@ data class ChatUiState(
     val isGenerating: Boolean = false,
     val lastStats: GenerationStats? = null,
     val error: String? = null,
+    /** Qué está haciendo el modelo ahora mismo, para no dejar la pantalla muda. */
+    val actividad: String? = null,
+    val herramientasActivas: Boolean = false,
 )
 
 @HiltViewModel
@@ -33,11 +38,13 @@ class ChatViewModel @Inject constructor(
     private val engine: InferenceEngine,
     private val modelFiles: ModelFilesRepository,
     private val preferencias: Preferencias,
+    private val herramientas: RegistroDeHerramientas,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState = _uiState.asStateFlow()
 
+    private val agente = AgenteConHerramientas(engine)
     private var genJob: Job? = null
 
     init {
@@ -45,6 +52,11 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             engine.state.collect { estado ->
                 _uiState.update { it.copy(engineState = estado) }
+            }
+        }
+        viewModelScope.launch {
+            preferencias.ajustes.collect { ajustes ->
+                _uiState.update { it.copy(herramientasActivas = ajustes.busquedaWebActiva) }
             }
         }
     }
@@ -68,7 +80,13 @@ class ChatViewModel @Inject constructor(
         genJob?.cancel()
         genJob = null
         _uiState.update {
-            it.copy(messages = emptyList(), lastStats = null, error = null, isGenerating = false)
+            it.copy(
+                messages = emptyList(),
+                lastStats = null,
+                error = null,
+                isGenerating = false,
+                actividad = null,
+            )
         }
         viewModelScope.launch {
             val ajustes = preferencias.actuales()
@@ -82,35 +100,51 @@ class ChatViewModel @Inject constructor(
         if (_uiState.value.engineState !is EngineState.Ready) return
 
         val historial = _uiState.value.messages + ChatMessage(ChatMessage.Role.USER, texto)
-        // La burbuja del asistente se crea vacía y se va reemplazando: así los updates
-        // parten del estado actual y no de una lista capturada que puede estar obsoleta.
         _uiState.update {
             it.copy(
                 messages = historial + ChatMessage(ChatMessage.Role.ASSISTANT, ""),
                 input = "",
                 isGenerating = true,
                 error = null,
+                actividad = null,
             )
         }
 
         genJob = viewModelScope.launch {
+            val disponibles = herramientas.disponibles()
             val acumulado = StringBuilder()
-            engine.generate(historial).collect { evento ->
+            agente.conversar(historial, disponibles).collect { evento ->
                 when (evento) {
-                    is GenerationEvent.Token -> {
-                        acumulado.append(evento.text)
+                    is EventoDeAgente.Token -> {
+                        acumulado.append(evento.texto)
+                        _uiState.update { it.copy(actividad = null) }
                         reemplazarRespuesta(acumulado.toString())
                     }
-                    is GenerationEvent.Done -> _uiState.update {
-                        it.copy(isGenerating = false, lastStats = evento.stats, error = avisoDeCorte(evento.stats))
+                    is EventoDeAgente.UsandoHerramienta -> _uiState.update {
+                        it.copy(actividad = descripcionDe(evento))
                     }
-                    is GenerationEvent.Failure -> _uiState.update {
-                        it.copy(isGenerating = false, error = evento.message)
+                    is EventoDeAgente.HerramientaLista -> _uiState.update {
+                        it.copy(actividad = "Leyendo lo que encontró…")
+                    }
+                    is EventoDeAgente.Fin -> _uiState.update {
+                        it.copy(
+                            isGenerating = false,
+                            actividad = null,
+                            lastStats = evento.stats,
+                            error = avisoDeCorte(evento.stats),
+                        )
+                    }
+                    is EventoDeAgente.Fallo -> _uiState.update {
+                        it.copy(isGenerating = false, actividad = null, error = evento.mensaje)
                     }
                 }
             }
         }
     }
+
+    private fun descripcionDe(evento: EventoDeAgente.UsandoHerramienta): String =
+        if (evento.detalle.isBlank()) "Usando ${evento.nombre}…"
+        else "Buscando: ${evento.detalle}"
 
     private fun reemplazarRespuesta(texto: String) {
         _uiState.update { estado ->
