@@ -50,6 +50,8 @@ class NodoHttpServer(
     private val puerto: Int = PUERTO_POR_DEFECTO,
     private val soloLocalhost: Boolean = true,
     private val token: String? = null,
+    private val margenStatusMs: Long = MARGEN_STATUS_MS,
+    private val intervaloLatidoMs: Long = INTERVALO_LATIDO_MS,
 ) {
     private var servidor: EmbeddedServer<*, *>? = null
     private val acceso = ControlDeAcceso()
@@ -150,7 +152,7 @@ class NodoHttpServer(
      */
     private suspend fun responderCompleto(call: ApplicationCall, peticion: ChatCompletionRequest) = coroutineScope {
         val resultados = service.generar(peticion).produceIn(this)
-        val temprano = withTimeoutOrNull(MARGEN_STATUS_MS) { resultados.receive() }
+        val temprano = withTimeoutOrNull(margenStatusMs) { resultados.receive() }
 
         if (temprano is CompletionResult.Fallo) {
             call.respond(HttpStatusCode.InternalServerError, errorDe(temprano.mensaje, temprano.tipo))
@@ -166,7 +168,7 @@ class NodoHttpServer(
                 while (true) {
                     write(" ")
                     flush()
-                    delay(INTERVALO_LATIDO_MS)
+                    delay(intervaloLatidoMs)
                 }
             }
             val resultado = try {

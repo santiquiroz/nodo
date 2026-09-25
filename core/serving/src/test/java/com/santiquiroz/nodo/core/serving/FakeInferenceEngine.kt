@@ -27,6 +27,9 @@ class FakeInferenceEngine(modeloInicial: String? = "modelo-de-prueba.gguf") : In
     var respuestasPorTurno: List<String> = emptyList()
     private var turno = 0
 
+    /** Se ejecuta al empezar cada generación: sirve para alargarla o retenerla a voluntad. */
+    var antesDeGenerar: suspend () -> Unit = {}
+
     override suspend fun load(modelPath: String, config: EngineConfig) {
         state.value = EngineState.Ready(ModelInfo(modelPath.substringAfterLast('/'), modelPath, 1000L))
     }
@@ -38,6 +41,7 @@ class FakeInferenceEngine(modeloInicial: String? = "modelo-de-prueba.gguf") : In
     override fun generate(messages: List<ChatMessage>, params: GenerationParams): Flow<GenerationEvent> = flow {
         ultimosMensajes = messages
         ultimosParams = params
+        antesDeGenerar()
         falloSimulado?.let {
             emit(GenerationEvent.Failure(it))
             return@flow
