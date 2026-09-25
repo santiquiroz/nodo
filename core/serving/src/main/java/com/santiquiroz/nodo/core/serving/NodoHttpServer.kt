@@ -5,6 +5,8 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.ApplicationCallPipeline
+import io.ktor.server.application.call
 import io.ktor.server.application.install
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
@@ -68,6 +70,9 @@ class NodoHttpServer(
             install(ContentNegotiation) {
                 json(Json { ignoreUnknownKeys = true; encodeDefaults = true })
             }
+            intercept(ApplicationCallPipeline.Plugins) {
+                if (!hostPermitido(call)) finish()
+            }
             routing {
                 get("/health") { call.respond(salud()) }
                 get("/v1/models") { if (autorizado(call)) call.respond(catalogo()) }
@@ -82,6 +87,13 @@ class NodoHttpServer(
     fun detener() {
         servidor?.stop(gracePeriodMillis = 500, timeoutMillis = 2_000)
         servidor = null
+    }
+
+    private suspend fun hostPermitido(call: ApplicationCall): Boolean {
+        val cabecera = call.request.headers[HttpHeaders.Host]
+        if (HostPermitido.esValido(cabecera, aceptarIpsPrivadas = !soloLocalhost)) return true
+        call.respond(HttpStatusCode.Forbidden, errorDe("Host no permitido: ${cabecera.orEmpty().take(100)}", "forbidden_host"))
+        return false
     }
 
     private suspend fun autorizado(call: ApplicationCall): Boolean {

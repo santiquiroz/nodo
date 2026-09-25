@@ -63,10 +63,16 @@ class NodoHttpServerTest {
     private fun cuerpoDeChat(stream: Boolean = false, mensajes: String = """[{"role":"user","content":"hola"}]""") =
         """{"model":"nodo","stream":$stream,"messages":$mensajes}"""
 
-    private suspend fun postJson(ruta: String, cuerpo: String, autorizacion: String? = null): HttpResponse =
+    private suspend fun postJson(
+        ruta: String,
+        cuerpo: String,
+        autorizacion: String? = null,
+        host: String? = null,
+    ): HttpResponse =
         cliente.post(url(ruta)) {
             contentType(ContentType.Application.Json)
             autorizacion?.let { header(HttpHeaders.Authorization, it) }
+            host?.let { header(HttpHeaders.Host, it) }
             setBody(cuerpo)
         }
 
@@ -185,6 +191,59 @@ class NodoHttpServerTest {
         val respuesta = postJson("/chat/completions", cuerpoDeChat())
         assertEquals(HttpStatusCode.OK, respuesta.status)
         assertEquals("Hola mundo", completionDe(respuesta.bodyAsText()).choices[0].message.content.texto)
+    }
+
+    @Test
+    fun `un Host ajeno en models recibe 403 forbidden_host`() = runBlocking {
+        arrancar()
+        val respuesta = cliente.get(url("/v1/models")) { header(HttpHeaders.Host, "evil.example:8080") }
+        assertEquals(HttpStatusCode.Forbidden, respuesta.status)
+        assertEquals("forbidden_host", tipoDeError(respuesta.bodyAsText()))
+    }
+
+    @Test
+    fun `un Host ajeno en chat completions recibe 403 sin llegar a generar`() = runBlocking {
+        val servidor = arrancar()
+        val respuesta = postJson("/v1/chat/completions", cuerpoDeChat(), host = "evil.example:8080")
+        assertEquals(HttpStatusCode.Forbidden, respuesta.status)
+        assertEquals("forbidden_host", tipoDeError(respuesta.bodyAsText()))
+        assertEquals(0L, servidor.peticionesAtendidas)
+    }
+
+    @Test
+    fun `un Host ajeno recibe 403 aunque traiga el token correcto`() = runBlocking {
+        arrancar(token = "secreto")
+        val respuesta = postJson(
+            "/v1/chat/completions",
+            cuerpoDeChat(),
+            autorizacion = "Bearer secreto",
+            host = "evil.example",
+        )
+        assertEquals(HttpStatusCode.Forbidden, respuesta.status)
+    }
+
+    @Test
+    fun `Host 127 0 0 1 con puerto responde normal`() = runBlocking {
+        arrancar()
+        val respuesta = cliente.get(url("/v1/models")) { header(HttpHeaders.Host, "127.0.0.1:$puerto") }
+        assertEquals(HttpStatusCode.OK, respuesta.status)
+    }
+
+    @Test
+    fun `Host localhost con puerto responde normal en chat completions`() = runBlocking {
+        arrancar()
+        val respuesta = postJson("/v1/chat/completions", cuerpoDeChat(), host = "localhost:$puerto")
+        assertEquals(HttpStatusCode.OK, respuesta.status)
+        assertEquals("Hola mundo", completionDe(respuesta.bodyAsText()).choices[0].message.content.texto)
+    }
+
+    @Test
+    fun `health sigue accesible con un Host valido y se cierra con uno ajeno`() = runBlocking {
+        arrancar()
+        val valido = cliente.get(url("/health")) { header(HttpHeaders.Host, "localhost:$puerto") }
+        val ajeno = cliente.get(url("/health")) { header(HttpHeaders.Host, "evil.example") }
+        assertEquals(HttpStatusCode.OK, valido.status)
+        assertEquals(HttpStatusCode.Forbidden, ajeno.status)
     }
 
     private suspend fun esperarHasta(condicion: () -> Boolean) = withTimeout(5_000) {
