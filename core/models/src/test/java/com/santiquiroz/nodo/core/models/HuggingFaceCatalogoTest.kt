@@ -1,6 +1,7 @@
 package com.santiquiroz.nodo.core.models
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -21,9 +22,9 @@ class HuggingFaceCatalogoTest {
     private val arbolReal = """
         [
           {"type":"file","oid":"c6c4","size":3274,"path":".gitattributes"},
-          {"type":"file","oid":"9cca","size":135,"lfs":{"size":1140516000,"pointerSize":135},
+          {"type":"file","oid":"9cca","size":135,"lfs":{"oid":"0f3a9c1e5b7d2468ace013579bdf2468ace013579bdf2468ace013579bdf2468","size":1140516000,"pointerSize":135},
            "path":"Qwen2.5-3B-Instruct-IQ2_M.gguf"},
-          {"type":"file","oid":"cc0b","size":135,"lfs":{"size":1929903264,"pointerSize":135},
+          {"type":"file","oid":"cc0b","size":135,"lfs":{"oid":"7e2b4d6f8a0c1e3f5a7b9c0d2e4f6a8b0c1d3e5f7a9b0c2d4e6f8a0b1c3d5e7f","size":1929903264,"pointerSize":135},
            "path":"Qwen2.5-3B-Instruct-Q4_K_M.gguf"},
           {"type":"file","oid":"aa11","size":1234,"path":"README.md"},
           {"type":"directory","oid":"bb22","size":0,"path":"subcarpeta"}
@@ -63,6 +64,20 @@ class HuggingFaceCatalogoTest {
         val archivos = HuggingFaceCatalogo.archivosGguf(arbolReal, "repo/x")
         val q4 = archivos.first { it.ruta.contains("Q4_K_M") }
         assertEquals(1_929_903_264L, q4.tamanoBytes)
+    }
+
+    @Test
+    fun `el sha256 sale del oid del bloque lfs`() {
+        val archivos = HuggingFaceCatalogo.archivosGguf(arbolReal, "repo/x")
+        val q4 = archivos.first { it.ruta.contains("Q4_K_M") }
+        assertEquals("7e2b4d6f8a0c1e3f5a7b9c0d2e4f6a8b0c1d3e5f7a9b0c2d4e6f8a0b1c3d5e7f", q4.sha256)
+    }
+
+    @Test
+    fun `un gguf sin bloque lfs no tiene sha256 que verificar`() {
+        val sinLfs = """[{"type":"file","oid":"c6c4","size":2048,"path":"diminuto-Q4_0.gguf"}]"""
+        val archivos = HuggingFaceCatalogo.archivosGguf(sinLfs, "repo/x")
+        assertNull(archivos.single().sha256)
     }
 
     @Test

@@ -51,6 +51,7 @@ object HuggingFaceCatalogo {
                     ruta = dto.path,
                     tamanoBytes = dto.tamanoReal,
                     cuantizacion = cuantizacionDelNombre(dto.path),
+                    sha256 = dto.lfs?.oid,
                 )
             }
             .sortedBy { it.tamanoBytes }

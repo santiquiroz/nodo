@@ -25,8 +25,9 @@ data class ArchivoDto(
     val tamanoReal: Long get() = lfs?.size ?: size
 }
 
+// En el bloque lfs, oid es el SHA-256 del contenido real (el oid de fuera es el del puntero git)
 @Serializable
-data class LfsDto(val size: Long = 0)
+data class LfsDto(val oid: String? = null, val size: Long = 0)
 
 /** Un repo de Hugging Face que publica GGUF. */
 data class RepoDeModelos(
@@ -43,6 +44,7 @@ data class ArchivoGguf(
     val ruta: String,
     val tamanoBytes: Long,
     val cuantizacion: String,
+    val sha256: String? = null,
 ) {
     val nombreDeArchivo: String get() = ruta.substringAfterLast('/')
     val urlDeDescarga: String get() = "https://huggingface.co/$repoId/resolve/main/$ruta"

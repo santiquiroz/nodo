@@ -66,16 +66,27 @@ class ModelDownloader @Inject constructor(
             return@flow
         }
 
-        if (parcial.length() != archivo.tamanoBytes) {
-            emit(ProgresoDescarga.Fallida("La descarga quedó incompleta, se puede reanudar"))
-            return@flow
-        }
-        if (!parcial.renameTo(destino)) {
-            emit(ProgresoDescarga.Fallida("No se pudo guardar el archivo final"))
-            return@flow
-        }
-        emit(ProgresoDescarga.Terminada(destino))
+        emit(finalizar(archivo, parcial, destino))
     }.flowOn(Dispatchers.IO)
+
+    private fun finalizar(archivo: ArchivoGguf, parcial: File, destino: File): ProgresoDescarga = when {
+        parcial.length() != archivo.tamanoBytes ->
+            ProgresoDescarga.Fallida("La descarga quedó incompleta, se puede reanudar")
+        !integridadVerificada(archivo, parcial) -> descartarCorrupto(parcial)
+        !parcial.renameTo(destino) -> ProgresoDescarga.Fallida("No se pudo guardar el archivo final")
+        else -> ProgresoDescarga.Terminada(destino)
+    }
+
+    // Sin hash publicado (archivo fuera de LFS) solo queda la comprobación de tamaño
+    private fun integridadVerificada(archivo: ArchivoGguf, parcial: File): Boolean =
+        archivo.sha256?.let { IntegridadDeDescarga.coincideConSha256(parcial, it) } ?: true
+
+    private fun descartarCorrupto(parcial: File): ProgresoDescarga {
+        parcial.delete()
+        return ProgresoDescarga.Fallida(
+            "El archivo descargado no coincide con el de Hugging Face (SHA-256); se borró, vuelve a descargarlo",
+        )
+    }
 
     private suspend inline fun transferir(
         archivo: ArchivoGguf,
@@ -83,33 +94,7 @@ class ModelDownloader @Inject constructor(
         tokenDeSesion: String?,
         emitir: (ProgresoDescarga) -> Unit,
     ) {
-        val yaDescargado = parcial.length()
-        val conexion = (URL(archivo.urlDeDescarga).openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 15_000
-            readTimeout = 60_000
-            instanceFollowRedirects = true
-            setRequestProperty("User-Agent", "Nodo/0.1 (Android)")
-            tokenDeSesion?.let { setRequestProperty("Authorization", "Bearer $it") }
-            if (yaDescargado > 0) setRequestProperty("Range", "bytes=$yaDescargado-")
-        }
-
-        val codigo = conexion.responseCode
-        // 206 = el servidor honró el rango; 200 con parcial existente = hay que empezar de cero
-        val reanudando = codigo == HttpURLConnection.HTTP_PARTIAL
-        if (codigo !in 200..299) {
-            conexion.disconnect()
-            error(
-                when (codigo) {
-                    401, 403 -> "Modelo restringido: acepta sus términos en Hugging Face y añade tu token"
-                    404 -> "El archivo ya no está en Hugging Face"
-                    416 -> "El archivo cambió en el servidor, bórralo y vuelve a empezar"
-                    else -> "Hugging Face respondió $codigo"
-                },
-            )
-        }
-
-        val desde = if (reanudando) yaDescargado else 0L
+        val (conexion, desde) = conectar(archivo.urlDeDescarga, tokenDeSesion, parcial.length())
         var escritos = desde
         conexion.inputStream.use { entrada ->
             RandomAccessFile(parcial, "rw").use { salida ->
@@ -131,6 +116,39 @@ class ModelDownloader @Inject constructor(
             }
         }
         emitir(ProgresoDescarga.EnCurso(escritos, archivo.tamanoBytes))
+    }
+
+    // 206 con el rango pedido = reanudar; 200 = empezar de cero; 206 con otro rango = volver a pedir desde 0
+    private fun conectar(url: String, tokenDeSesion: String?, pedido: Long): Pair<HttpURLConnection, Long> {
+        val conexion = abrirConexion(url, tokenDeSesion, pedido)
+        val codigo = conexion.responseCode
+        if (codigo !in 200..299) {
+            conexion.disconnect()
+            error(mensajeDeError(codigo))
+        }
+        val desde = IntegridadDeDescarga.offsetDeEscritura(codigo, conexion.getHeaderField("Content-Range"), pedido)
+        if (desde != null) return conexion to desde
+        conexion.disconnect()
+        check(pedido > 0) { "Hugging Face respondió un rango que no se pidió" }
+        return conectar(url, tokenDeSesion, 0)
+    }
+
+    private fun abrirConexion(url: String, tokenDeSesion: String?, pedido: Long): HttpURLConnection =
+        (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 15_000
+            readTimeout = 60_000
+            instanceFollowRedirects = true
+            setRequestProperty("User-Agent", "Nodo/0.1 (Android)")
+            tokenDeSesion?.let { setRequestProperty("Authorization", "Bearer $it") }
+            if (pedido > 0) setRequestProperty("Range", "bytes=$pedido-")
+        }
+
+    private fun mensajeDeError(codigo: Int): String = when (codigo) {
+        401, 403 -> "Modelo restringido: acepta sus términos en Hugging Face y añade tu token"
+        404 -> "El archivo ya no está en Hugging Face"
+        416 -> "El archivo cambió en el servidor, bórralo y vuelve a empezar"
+        else -> "Hugging Face respondió $codigo"
     }
 
     fun borrar(nombre: String): Boolean = archivoDestino(nombre)?.delete() == true
