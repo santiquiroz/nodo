@@ -99,6 +99,36 @@ class CompatibilidadTest {
         assertTrue("El de gama media debe estimar menos", lento < rapido)
     }
 
+    // Llama 3.2 3B: 8 cabezas KV, así que el KV cache pesa mucho más que en Qwen
+    private val llama3b = ModelSpec(
+        nombre = "llama-3.2-3b",
+        parametrosMilesDeMillones = 3.2,
+        cuantizacion = "Q4_K_M",
+        capas = 28,
+        cabezasKv = 8,
+        dimensionEmbedding = 3072,
+        cabezasAtencion = 24,
+        contextoEntrenado = 131072,
+    )
+
+    @Test
+    fun `el mismo modelo pasa de verde a amarillo al subir el contexto configurado`() {
+        assertEquals(Semaforo.CORRE_BIEN, Compatibilidad.evaluar(llama3b, s25Ultra, 4096).semaforo)
+        assertEquals(Semaforo.JUSTO, Compatibilidad.evaluar(llama3b, s25Ultra, 32768).semaforo)
+    }
+
+    @Test
+    fun `el veredicto cita el contexto con el que se evaluo`() {
+        val veredicto = Compatibilidad.evaluar(llama3b, s25Ultra, 32768)
+        assertTrue("Debe citar el contexto: ${veredicto.razon}", veredicto.razon.contains("contexto 32768"))
+    }
+
+    @Test
+    fun `el veredicto cita el contexto recortado al entrenado`() {
+        val veredicto = Compatibilidad.evaluar(qwen(3.0, 36), s25Ultra, 999_999)
+        assertTrue("Debe citar el contexto real: ${veredicto.razon}", veredicto.razon.contains("contexto 32768"))
+    }
+
     @Test
     fun `el veredicto explica el porque con cifras`() {
         val veredicto = Compatibilidad.evaluar(qwen(3.0, 36), s25Ultra, 4096)

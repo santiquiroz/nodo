@@ -10,15 +10,17 @@ import com.santiquiroz.nodo.core.models.HuggingFaceClient
 import com.santiquiroz.nodo.core.models.ModelDownloader
 import com.santiquiroz.nodo.core.models.ProgresoDescarga
 import com.santiquiroz.nodo.core.models.RepoDeModelos
+import com.santiquiroz.nodo.core.settings.Preferencias
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-
-private const val CONTEXTO_POR_DEFECTO = 4096
 
 data class ArchivoConVeredicto(
     val archivo: ArchivoGguf,
@@ -44,12 +46,22 @@ class ExploreViewModel @Inject constructor(
     private val client: HuggingFaceClient,
     private val downloader: ModelDownloader,
     private val lectorDeDispositivo: DeviceProfileReader,
+    private val preferencias: Preferencias,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ExploreUiState())
     val uiState = _uiState.asStateFlow()
 
     private val descargas = mutableMapOf<String, Job>()
+
+    init {
+        // Un veredicto calculado con otro contexto ya no dice la verdad: se vuelve a pedir
+        viewModelScope.launch {
+            preferencias.ajustes.map { it.contexto }.distinctUntilChanged().drop(1).collect { _ ->
+                _uiState.update { it.copy(archivos = it.archivos.map(::sinVeredicto)) }
+            }
+        }
+    }
 
     fun onConsultaChange(texto: String) {
         _uiState.update { it.copy(consulta = texto) }
@@ -108,9 +120,10 @@ class ExploreViewModel @Inject constructor(
         viewModelScope.launch {
             actualizarArchivo(archivo.ruta) { it.copy(evaluando = true, error = null) }
             val dispositivo = lectorDeDispositivo.leer()
+            val contexto = preferencias.actuales().contexto
             client.especificacionDe(archivo)
                 .onSuccess { spec ->
-                    val veredicto = Compatibilidad.evaluar(spec, dispositivo, CONTEXTO_POR_DEFECTO)
+                    val veredicto = Compatibilidad.evaluar(spec, dispositivo, contexto)
                     actualizarArchivo(archivo.ruta) { it.copy(evaluando = false, veredicto = veredicto) }
                 }
                 .onFailure { error ->
@@ -140,6 +153,8 @@ class ExploreViewModel @Inject constructor(
         descargas.remove(archivo.ruta)?.cancel()
         actualizarArchivo(archivo.ruta) { it.copy(progreso = null) }
     }
+
+    private fun sinVeredicto(item: ArchivoConVeredicto) = item.copy(veredicto = null)
 
     private fun actualizarArchivo(ruta: String, cambio: (ArchivoConVeredicto) -> ArchivoConVeredicto) {
         _uiState.update { estado ->

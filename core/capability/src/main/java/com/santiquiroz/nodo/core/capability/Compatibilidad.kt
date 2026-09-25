@@ -57,13 +57,12 @@ data class Huella(
         // Peor caso conocido: preferimos sobrestimar antes que prometer que cabe y morir por OOM
         private const val BYTES_POR_PARAMETRO_DESCONOCIDO = 1.06
 
-        fun calcular(modelo: ModelSpec, contexto: Int): Huella {
-            val contextoReal = min(contexto, modelo.contextoEntrenado)
-            return Huella(
-                pesosGb = pesosGb(modelo),
-                kvCacheGb = kvCacheGb(modelo, contextoReal),
-            )
-        }
+        fun calcular(modelo: ModelSpec, contexto: Int): Huella = Huella(
+            pesosGb = pesosGb(modelo),
+            kvCacheGb = kvCacheGb(modelo, contextoEfectivo(modelo, contexto)),
+        )
+
+        fun contextoEfectivo(modelo: ModelSpec, contexto: Int): Int = min(contexto, modelo.contextoEntrenado)
 
         private fun pesosGb(modelo: ModelSpec): Double {
             modelo.tamanoArchivoBytes?.let { return it / BYTES_POR_GB }
@@ -116,7 +115,7 @@ object Compatibilidad {
             semaforo = semaforo,
             huella = huella,
             tokensPorSegundoEstimados = velocidad,
-            razon = explicar(semaforo, huella, disponible, velocidad),
+            razon = explicar(semaforo, huella, disponible, velocidad, Huella.contextoEfectivo(modelo, contexto)),
         )
     }
 
@@ -146,8 +145,9 @@ object Compatibilidad {
         huella: Huella,
         disponibleGb: Double,
         velocidad: Double,
+        contexto: Int,
     ): String {
-        val uso = "%.1f/%.1f GB".format(huella.totalGb, disponibleGb)
+        val uso = "%.1f/%.1f GB con contexto %d".format(huella.totalGb, disponibleGb, contexto)
         val ritmo = "~%.0f tok/s".format(velocidad)
         return when (semaforo) {
             Semaforo.CORRE_BIEN -> "Cabe con holgura: $uso · $ritmo estimados"
