@@ -22,6 +22,7 @@ class FakeInferenceEngine(modeloInicial: String? = "modelo-de-prueba.gguf") : In
     var razonDeCorte: FinishReason = FinishReason.FIN_NATURAL
     var ultimosParams: GenerationParams? = null
     var ultimosMensajes: List<ChatMessage> = emptyList()
+    var piezasEntregadas = 0
 
     /** Para probar el bucle de herramientas: una respuesta completa por cada vuelta. */
     var respuestasPorTurno: List<String> = emptyList()
@@ -48,7 +49,10 @@ class FakeInferenceEngine(modeloInicial: String? = "modelo-de-prueba.gguf") : In
         }
         val salida = respuestasPorTurno.getOrNull(turno)?.let { listOf(it) } ?: piezas
         turno++
-        salida.forEach { emit(GenerationEvent.Token(it)) }
+        salida.forEach {
+            piezasEntregadas++
+            emit(GenerationEvent.Token(it))
+        }
         emit(GenerationEvent.Done(GenerationStats(7, salida.size, 40, 150, razonDeCorte)))
     }
 }

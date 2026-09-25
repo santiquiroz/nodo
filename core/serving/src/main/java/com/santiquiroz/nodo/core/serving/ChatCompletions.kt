@@ -158,7 +158,7 @@ class ChatCompletionsService(
         encabezado: EncabezadoDeStream,
     ): Flow<StreamEvent> = flow {
         var primero = true
-        engine.generate(mensajes, aParametros(peticion)).collect { evento ->
+        generarHastaLaParada(mensajes, peticion).collect { evento ->
             when (evento) {
                 is GenerationEvent.Token -> {
                     emit(encabezado.chunk(Delta(role = if (primero) "assistant" else null, content = evento.text)))
@@ -229,7 +229,7 @@ class ChatCompletionsService(
         val texto = StringBuilder()
         var stats: GenerationStats? = null
         var fallo: String? = null
-        engine.generate(mensajes, aParametros(peticion)).collect { evento ->
+        generarHastaLaParada(mensajes, peticion).collect { evento ->
             when (evento) {
                 is GenerationEvent.Token -> texto.append(evento.text)
                 is GenerationEvent.Done -> stats = evento.stats
@@ -242,6 +242,9 @@ class ChatCompletionsService(
             fallo = fallo ?: if (stats == null) "El motor terminó sin estadísticas" else null,
         )
     }
+
+    private fun generarHastaLaParada(mensajes: List<ChatMessage>, peticion: ChatCompletionRequest) =
+        engine.generate(mensajes, aParametros(peticion)).cortandoEn(peticion.stop)
 
     private suspend fun ejecutar(llamadas: List<LlamadaDeHerramienta>, propias: List<Herramienta>): List<String> =
         llamadas.map { llamada ->

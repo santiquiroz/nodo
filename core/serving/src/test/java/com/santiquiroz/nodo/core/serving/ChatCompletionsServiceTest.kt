@@ -378,4 +378,85 @@ class ChatCompletionsServiceTest {
         val idSegunda = segunda.respuesta.choices[0].message.toolCalls.single().id
         assertTrue("Ids repetidos: $idPrimera", idPrimera != idSegunda)
     }
+
+    // --- Secuencias de parada (`stop`) ---
+
+    private fun conParada(vararg secuencias: String) = peticion().copy(stop = SecuenciasDeParada(secuencias.toList()))
+
+    private fun contenidoDelStream(elecciones: List<ChunkChoice>) = elecciones.joinToString("") { it.delta.content.orEmpty() }
+
+    @Test
+    fun `stop corta el texto antes de la secuencia y cierra con stop`() = runTest {
+        engine.piezas = listOf("Hola", " mundo", "FIN", " extra")
+        val ok = resultadoDe(conParada("FIN")) as CompletionResult.Ok
+        assertEquals("Hola mundo", ok.respuesta.choices[0].message.content.texto)
+        assertEquals("stop", ok.respuesta.choices[0].finishReason)
+    }
+
+    @Test
+    fun `al aparecer la parada se deja de pedirle tokens al motor`() = runTest {
+        engine.piezas = listOf("Hola", " mundo", "FIN", " extra", " mas")
+        resultadoDe(conParada("FIN"))
+        assertEquals(3, engine.piezasEntregadas)
+    }
+
+    @Test
+    fun `stop como arreglo corta en la primera secuencia que aparezca`() = runTest {
+        engine.piezas = listOf("uno", " ###", " dos", " FIN")
+        val ok = resultadoDe(conParada("FIN", "###")) as CompletionResult.Ok
+        assertEquals("uno ", ok.respuesta.choices[0].message.content.texto)
+    }
+
+    @Test
+    fun `una parada partida entre tokens tambien se detecta`() = runTest {
+        engine.piezas = listOf("Hola", " FI", "N", " extra")
+        val ok = resultadoDe(conParada("FIN")) as CompletionResult.Ok
+        assertEquals("Hola ", ok.respuesta.choices[0].message.content.texto)
+    }
+
+    @Test
+    fun `en stream ningun delta deja escapar el comienzo de una parada partida`() = runTest {
+        engine.piezas = listOf("Hola", " FI", "N", " extra")
+        val elecciones = deltasDe(service.generarStream(conParada("FIN").copy(stream = true)).toList())
+
+        assertTrue(elecciones.none { it.delta.content.orEmpty().contains("FI") })
+        assertEquals("Hola ", contenidoDelStream(elecciones))
+        assertEquals("stop", elecciones.last().finishReason)
+        assertEquals(3, engine.piezasEntregadas)
+    }
+
+    @Test
+    fun `en stream lo retenido que no resulto parada se entrega completo`() = runTest {
+        engine.piezas = listOf("Hola FI", "JO", " y F")
+        val eventos = service.generarStream(conParada("FIN").copy(stream = true)).toList()
+        assertEquals("Hola FIJO y F", contenidoDelStream(deltasDe(eventos)))
+        assertTrue(eventos.last() is StreamEvent.Fin)
+    }
+
+    @Test
+    fun `sin stop el texto llega completo aunque contenga cualquier secuencia`() = runTest {
+        engine.piezas = listOf("Hola", "FIN", " extra")
+        val ok = resultadoDe(peticion()) as CompletionResult.Ok
+        assertEquals("HolaFIN extra", ok.respuesta.choices[0].message.content.texto)
+        assertEquals(3, engine.piezasEntregadas)
+    }
+
+    @Test
+    fun `una secuencia vacia no corta nada`() = runTest {
+        val ok = resultadoDe(conParada("")) as CompletionResult.Ok
+        assertEquals("Hola mundo", ok.respuesta.choices[0].message.content.texto)
+    }
+
+    @Test
+    fun `stop se acepta como string, como arreglo y como null`() {
+        fun stopDe(valor: String) = json.decodeFromString(
+            ChatCompletionRequest.serializer(),
+            """{"model":"x","messages":[{"role":"user","content":"hola"}],"stop":$valor}""",
+        ).stop.secuencias
+
+        assertEquals(listOf("FIN"), stopDe("\"FIN\""))
+        assertEquals(listOf("FIN", "###"), stopDe("""["FIN","###"]"""))
+        assertEquals(emptyList<String>(), stopDe("null"))
+        assertEquals(listOf("FIN"), stopDe("""["FIN",null]"""))
+    }
 }

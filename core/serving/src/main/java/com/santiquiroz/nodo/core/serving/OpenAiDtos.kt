@@ -48,6 +48,32 @@ object TextoDelMensajeSerializer : KSerializer<TextoDelMensaje> {
     }
 }
 
+// `stop` de OpenAI llega como string suelto, como arreglo o como null
+@Serializable(with = SecuenciasDeParadaSerializer::class)
+data class SecuenciasDeParada(val secuencias: List<String> = emptyList())
+
+object SecuenciasDeParadaSerializer : KSerializer<SecuenciasDeParada> {
+    override val descriptor: SerialDescriptor = buildClassSerialDescriptor("SecuenciasDeParada")
+
+    override fun deserialize(decoder: Decoder): SecuenciasDeParada {
+        val json = decoder as? JsonDecoder ?: return SecuenciasDeParada(listOf(decoder.decodeString()))
+        return SecuenciasDeParada(
+            when (val elemento = json.decodeJsonElement()) {
+                is JsonNull -> emptyList()
+                is JsonPrimitive -> listOf(elemento.content)
+                is JsonArray -> elemento.filterIsInstance<JsonPrimitive>().filterNot { it is JsonNull }.map { it.content }
+                is JsonObject -> emptyList()
+            },
+        )
+    }
+
+    override fun serialize(encoder: Encoder, value: SecuenciasDeParada) {
+        val json = encoder as? JsonEncoder
+        if (json == null) encoder.encodeString(value.secuencias.firstOrNull().orEmpty())
+        else json.encodeJsonElement(JsonArray(value.secuencias.map { JsonPrimitive(it) }))
+    }
+}
+
 @Serializable
 data class ChatCompletionRequest(
     val model: String? = null,
@@ -59,6 +85,7 @@ data class ChatCompletionRequest(
     val stream: Boolean = false,
     val tools: List<ToolDto> = emptyList(),
     @SerialName("tool_choice") val toolChoice: JsonElement? = null,
+    val stop: SecuenciasDeParada = SecuenciasDeParada(),
 )
 
 @Serializable
