@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonObject as JsonObj
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -306,5 +307,66 @@ class ChatCompletionsServiceTest {
     fun `sin herramientas el prompt no se ensucia`() = runTest {
         resultadoDe(peticion())
         assertTrue(engine.ultimosMensajes.none { it.content.contains("<tools>") })
+    }
+
+    // --- Tool calling en streaming y tool_choice ---
+
+    private val llamadaCruda = """<tool_call>{"name":"buscar_web","arguments":{"consulta":"clima"}}</tool_call>"""
+
+    private fun deltasDe(eventos: List<StreamEvent>) =
+        eventos.filterIsInstance<StreamEvent.Chunk>().map { it.chunk.choices.single() }
+
+    @Test
+    fun `en stream una llamada del modelo llega como delta tool_calls y cierra con tool_calls`() = runTest {
+        engine.piezas = listOf(llamadaCruda)
+        val eventos = service.generarStream(peticionConTools().copy(stream = true)).toList()
+        val elecciones = deltasDe(eventos)
+
+        val llamada = elecciones.firstNotNullOf { it.delta.toolCalls }.single()
+        assertEquals(0, llamada.index)
+        assertEquals("buscar_web", llamada.function.name)
+        assertTrue(llamada.function.arguments.contains("clima"))
+        assertEquals("tool_calls", elecciones.last().finishReason)
+        assertTrue(elecciones.none { it.delta.content.orEmpty().contains("<tool_call>") })
+        assertTrue(eventos.last() is StreamEvent.Fin)
+    }
+
+    @Test
+    fun `en stream con tools pero sin llamada se emite el texto y stop`() = runTest {
+        engine.piezas = listOf("Hacen ", "28 grados")
+        val elecciones = deltasDe(service.generarStream(peticionConTools().copy(stream = true)).toList())
+
+        assertEquals("Hacen 28 grados", elecciones.joinToString("") { it.delta.content.orEmpty() })
+        assertTrue(elecciones.all { it.delta.toolCalls == null })
+        assertEquals("stop", elecciones.last().finishReason)
+    }
+
+    @Test
+    fun `tool_choice none no inyecta las herramientas del cliente`() = runTest {
+        resultadoDe(peticionConTools().copy(toolChoice = JsonPrimitive("none")))
+        assertTrue(engine.ultimosMensajes.none { it.content.contains("<tools>") })
+    }
+
+    @Test
+    fun `tool_choice none tampoco inyecta herramientas en stream`() = runTest {
+        service.generarStream(peticionConTools().copy(stream = true, toolChoice = JsonPrimitive("none"))).toList()
+        assertTrue(engine.ultimosMensajes.none { it.content.contains("<tools>") })
+    }
+
+    @Test
+    fun `tool_choice none tampoco expone las herramientas propias de Nodo`() = runTest {
+        conHerramientaPropia().generar(peticion().copy(toolChoice = JsonPrimitive("none"))).first()
+        assertTrue(engine.ultimosMensajes.none { it.content.contains("<tools>") })
+    }
+
+    @Test
+    fun `dos respuestas consecutivas con llamadas no repiten ids`() = runTest {
+        engine.piezas = listOf(llamadaCruda)
+        val primera = resultadoDe(peticionConTools()) as CompletionResult.Ok
+        val segunda = resultadoDe(peticionConTools()) as CompletionResult.Ok
+
+        val idPrimera = primera.respuesta.choices[0].message.toolCalls.single().id
+        val idSegunda = segunda.respuesta.choices[0].message.toolCalls.single().id
+        assertTrue("Ids repetidos: $idPrimera", idPrimera != idSegunda)
     }
 }

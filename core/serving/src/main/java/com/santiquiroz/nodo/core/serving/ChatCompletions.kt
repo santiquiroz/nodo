@@ -12,7 +12,11 @@ import com.santiquiroz.nodo.core.tools.Herramienta
 import com.santiquiroz.nodo.core.tools.LlamadaDeHerramienta
 import com.santiquiroz.nodo.core.tools.ProtocoloDeHerramientas
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import java.util.UUID
 
 sealed interface CompletionResult {
     data class Ok(val respuesta: ChatCompletionResponse) : CompletionResult
@@ -34,6 +38,7 @@ class ChatCompletionsService(
     private val herramientasPropias: ProveedorDeHerramientas = ProveedorDeHerramientas { emptyList() },
     private val reloj: () -> Long = { System.currentTimeMillis() },
     private val generarId: (Long) -> String = { "chatcmpl-$it" },
+    private val generarIdDeLlamada: () -> String = { "call_${UUID.randomUUID().toString().replace("-", "")}" },
 ) {
 
     fun modeloActivo(): String? = (engine.state.value as? EngineState.Ready)?.model?.name
@@ -56,9 +61,8 @@ class ChatCompletionsService(
             return@flow
         }
 
-        val delCliente = peticion.tools.map { aDefinicion(it) }
-        // Si el cliente trae sus propias herramientas, manda él: es su agente, no el nuestro
-        val propias = if (delCliente.isEmpty()) herramientasPropias.disponibles() else emptyList()
+        val delCliente = herramientasDelCliente(peticion)
+        val propias = herramientasPropiasPara(peticion, delCliente)
         val expuestas = delCliente + propias.map { it.definicion }
 
         var mensajes = aMensajesDeDominio(peticion.messages, expuestas)
@@ -80,7 +84,7 @@ class ChatCompletionsService(
                 return@flow
             }
             acumulado = sumar(acumulado, turno.stats)
-            val llamadas = if (expuestas.isEmpty()) emptyList() else ProtocoloDeHerramientas.extraerLlamadas(turno.texto)
+            val llamadas = if (expuestas.isEmpty()) emptyList() else extraerLlamadas(turno.texto)
 
             // Sin llamadas, o las pidió el cliente: se responde y que decida él
             if (llamadas.isEmpty()) {
@@ -118,7 +122,8 @@ class ChatCompletionsService(
             emit(StreamEvent.Error(mensajeDeRechazo(RechazoPrevio.SIN_MODELO), RechazoPrevio.SIN_MODELO.tipo))
             return@flow
         }
-        val mensajes = aMensajesDeDominio(peticion.messages, peticion.tools.map { aDefinicion(it) })
+        val delCliente = herramientasDelCliente(peticion)
+        val mensajes = aMensajesDeDominio(peticion.messages, delCliente)
         if (mensajes.isEmpty()) {
             emit(
                 StreamEvent.Error(
@@ -128,51 +133,95 @@ class ChatCompletionsService(
             )
             return@flow
         }
-        val id = generarId(reloj())
-        val creado = reloj() / 1000
-        var primero = true
+        val encabezado = EncabezadoDeStream(id = generarId(reloj()), creado = reloj() / 1000, modelo = modelo)
+        if (delCliente.isEmpty()) {
+            emitAll(streamDeTokens(mensajes, peticion, encabezado))
+        } else {
+            emitAll(streamConHerramientas(mensajes, peticion, encabezado))
+        }
+    }
 
+    private class EncabezadoDeStream(val id: String, val creado: Long, val modelo: String) {
+        fun chunk(delta: Delta, finishReason: String? = null) = StreamEvent.Chunk(
+            ChatCompletionChunk(
+                id = id,
+                created = creado,
+                model = modelo,
+                choices = listOf(ChunkChoice(delta = delta, finishReason = finishReason)),
+            ),
+        )
+    }
+
+    private fun streamDeTokens(
+        mensajes: List<ChatMessage>,
+        peticion: ChatCompletionRequest,
+        encabezado: EncabezadoDeStream,
+    ): Flow<StreamEvent> = flow {
+        var primero = true
         engine.generate(mensajes, aParametros(peticion)).collect { evento ->
             when (evento) {
                 is GenerationEvent.Token -> {
-                    emit(
-                        StreamEvent.Chunk(
-                            ChatCompletionChunk(
-                                id = id,
-                                created = creado,
-                                model = modelo,
-                                choices = listOf(
-                                    ChunkChoice(
-                                        delta = Delta(
-                                            role = if (primero) "assistant" else null,
-                                            content = evento.text,
-                                        ),
-                                    ),
-                                ),
-                            ),
-                        ),
-                    )
+                    emit(encabezado.chunk(Delta(role = if (primero) "assistant" else null, content = evento.text)))
                     primero = false
                 }
                 is GenerationEvent.Done -> {
-                    emit(
-                        StreamEvent.Chunk(
-                            ChatCompletionChunk(
-                                id = id,
-                                created = creado,
-                                model = modelo,
-                                choices = listOf(
-                                    ChunkChoice(delta = Delta(), finishReason = aMotivo(evento.stats.finishReason)),
-                                ),
-                            ),
-                        ),
-                    )
+                    emit(encabezado.chunk(Delta(), aMotivo(evento.stats.finishReason)))
                     emit(StreamEvent.Fin)
                 }
                 is GenerationEvent.Failure -> emit(StreamEvent.Error(evento.message, "engine_error"))
             }
         }
     }
+
+    // Una llamada no se sabe completa hasta cerrar el turno: se bufferiza como en generar()
+    private fun streamConHerramientas(
+        mensajes: List<ChatMessage>,
+        peticion: ChatCompletionRequest,
+        encabezado: EncabezadoDeStream,
+    ): Flow<StreamEvent> = flow {
+        emit(encabezado.chunk(Delta(role = "assistant")))
+        val turno = generarUnTurno(mensajes, peticion)
+        turno.fallo?.let {
+            emit(StreamEvent.Error(it, "engine_error"))
+            return@flow
+        }
+        val llamadas = extraerLlamadas(turno.texto)
+        if (llamadas.isEmpty()) {
+            emit(encabezado.chunk(Delta(content = turno.texto)))
+            emit(encabezado.chunk(Delta(), aMotivo(turno.stats.finishReason)))
+        } else {
+            emit(encabezado.chunk(deltaConLlamadas(turno.texto, llamadas)))
+            emit(encabezado.chunk(Delta(), "tool_calls"))
+        }
+        emit(StreamEvent.Fin)
+    }
+
+    private fun deltaConLlamadas(texto: String, llamadas: List<LlamadaDeHerramienta>) = Delta(
+        content = ProtocoloDeHerramientas.textoSinLlamadas(texto).ifBlank { null },
+        toolCalls = llamadas.mapIndexed { indice, llamada ->
+            ToolCallDeltaDto(
+                index = indice,
+                id = llamada.id,
+                function = FunctionCallDto(llamada.nombre, llamada.argumentosJson),
+            )
+        },
+    )
+
+    private fun herramientasDelCliente(peticion: ChatCompletionRequest): List<DefinicionDeHerramienta> =
+        if (rechazaHerramientas(peticion)) emptyList() else peticion.tools.map { aDefinicion(it) }
+
+    // Si el cliente trae sus propias herramientas, manda él: es su agente, no el nuestro
+    private suspend fun herramientasPropiasPara(
+        peticion: ChatCompletionRequest,
+        delCliente: List<DefinicionDeHerramienta>,
+    ): List<Herramienta> =
+        if (delCliente.isEmpty() && !rechazaHerramientas(peticion)) herramientasPropias.disponibles() else emptyList()
+
+    private fun rechazaHerramientas(peticion: ChatCompletionRequest): Boolean =
+        (peticion.toolChoice as? JsonPrimitive)?.contentOrNull == "none"
+
+    private fun extraerLlamadas(texto: String): List<LlamadaDeHerramienta> =
+        ProtocoloDeHerramientas.extraerLlamadas(texto) { generarIdDeLlamada() }
 
     private class Turno(val texto: String, val stats: GenerationStats, val fallo: String?)
 

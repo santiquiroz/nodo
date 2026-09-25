@@ -136,7 +136,16 @@ data class ChunkChoice(
 data class Delta(
     val role: String? = null,
     val content: String? = null,
-    @SerialName("tool_calls") val toolCalls: List<ToolCallDto> = emptyList(),
+    @SerialName("tool_calls") val toolCalls: List<ToolCallDeltaDto>? = null,
+)
+
+// En el stream OpenAI exige `index` para que el cliente ensamble cada llamada
+@Serializable
+data class ToolCallDeltaDto(
+    val index: Int,
+    val id: String,
+    val type: String = "function",
+    val function: FunctionCallDto,
 )
 
 @Serializable
