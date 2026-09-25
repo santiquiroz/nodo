@@ -118,6 +118,40 @@ class ProtocoloDeHerramientasTest {
     }
 
     @Test
+    fun `el JSON pelado de Llama 3 no se repite como texto para el usuario`() {
+        val salida = """{"name":"buscar_web","parameters":{"consulta":"x"}}"""
+        assertEquals("", ProtocoloDeHerramientas.textoSinLlamadas(salida))
+    }
+
+    @Test
+    fun `el JSON pelado dentro de un bloque de codigo tambien se retira`() {
+        val salida = """
+            ```json
+            {"name": "buscar_web", "arguments": {"consulta": "hola"}}
+            ```
+        """.trimIndent()
+        assertEquals("", ProtocoloDeHerramientas.textoSinLlamadas(salida))
+    }
+
+    @Test
+    fun `lo que el modelo escribe despues del JSON pelado se conserva`() {
+        val salida = """{"name":"buscar_web","parameters":{"consulta":"x"}} Ya casi."""
+        assertEquals("Ya casi.", ProtocoloDeHerramientas.textoSinLlamadas(salida))
+    }
+
+    @Test
+    fun `un JSON que no es una llamada se conserva intacto para el usuario`() {
+        val salida = """{"resultado": 42, "unidad": "grados"}"""
+        assertEquals(salida, ProtocoloDeHerramientas.textoSinLlamadas(salida))
+    }
+
+    @Test
+    fun `un bloque de codigo que no es una llamada conserva sus vallas`() {
+        val salida = "```json\n{\"resultado\": 42}\n```"
+        assertEquals(salida, ProtocoloDeHerramientas.textoSinLlamadas(salida))
+    }
+
+    @Test
     fun `el resultado de la herramienta se envuelve como espera la plantilla`() {
         val envuelto = ProtocoloDeHerramientas.comoRespuestaDeHerramienta("28 grados")
         assertEquals("<tool_response>\n28 grados\n</tool_response>", envuelto)

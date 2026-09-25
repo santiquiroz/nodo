@@ -71,7 +71,15 @@ object ProtocoloDeHerramientas {
 
     /** El texto que queda para el usuario una vez quitadas las llamadas. */
     fun textoSinLlamadas(texto: String): String =
+        if (extraerEntreEtiquetas(texto).isEmpty()) quitarJsonSuelto(texto) else quitarEtiquetadas(texto)
+
+    private fun quitarEtiquetadas(texto: String): String =
         texto.replace(Regex("$ABRE_LLAMADA.*?$CIERRA_LLAMADA", RegexOption.DOT_MATCHES_ALL), "").trim()
+
+    private fun quitarJsonSuelto(texto: String): String {
+        val objeto = objetoDeLlamadaSuelta(texto) ?: return quitarEtiquetadas(texto)
+        return sinVallas(texto).removePrefix(objeto).trim()
+    }
 
     private fun extraerEntreEtiquetas(texto: String): List<String> =
         Regex("$ABRE_LLAMADA\\s*(\\{.*?\\})\\s*$CIERRA_LLAMADA", RegexOption.DOT_MATCHES_ALL)
@@ -83,13 +91,19 @@ object ProtocoloDeHerramientas {
      * Llama 3.x no envuelve la llamada en ninguna etiqueta: el turno entero es el JSON,
      * y además nombra los argumentos `parameters`. Aceptamos las dos claves.
      */
-    private fun extraerJsonSuelto(texto: String): List<String> {
-        val limpio = texto.replace(Regex("```(?:json)?"), "").trim()
-        if (!limpio.startsWith("{")) return emptyList()
-        val objeto = recortarObjeto(limpio) ?: return emptyList()
+    private fun extraerJsonSuelto(texto: String): List<String> = listOfNotNull(objetoDeLlamadaSuelta(texto))
+
+    private fun objetoDeLlamadaSuelta(texto: String): String? {
+        val limpio = sinVallas(texto)
+        if (!limpio.startsWith("{")) return null
+        val objeto = recortarObjeto(limpio) ?: return null
         val tieneArgumentos = objeto.contains("\"arguments\"") || objeto.contains("\"parameters\"")
-        return if (objeto.contains("\"name\"") && tieneArgumentos) listOf(objeto) else emptyList()
+        return objeto.takeIf { it.contains("\"name\"") && tieneArgumentos && esLlamadaValida(it) }
     }
+
+    private fun sinVallas(texto: String): String = texto.replace(Regex("```(?:json)?"), "").trim()
+
+    private fun esLlamadaValida(objeto: String): Boolean = aLlamada(objeto, id = "") != null
 
     /** Corta el primer objeto JSON balanceado, ignorando llaves dentro de cadenas. */
     private fun recortarObjeto(texto: String): String? {

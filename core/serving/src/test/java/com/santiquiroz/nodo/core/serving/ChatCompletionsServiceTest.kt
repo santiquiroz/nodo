@@ -230,6 +230,15 @@ class ChatCompletionsServiceTest {
     }
 
     @Test
+    fun `una llamada de Llama 3 sin etiquetas no se repite en content`() = runTest {
+        engine.piezas = listOf("""{"name": "buscar_web", "parameters": {"consulta": "clima"}}""")
+        val ok = resultadoDe(peticionConTools()) as CompletionResult.Ok
+        val mensaje = ok.respuesta.choices[0].message
+        assertEquals("", mensaje.content.texto)
+        assertEquals(1, mensaje.toolCalls.size)
+    }
+
+    @Test
     fun `Nodo no ejecuta las herramientas del cliente, se las devuelve`() = runTest {
         engine.piezas = listOf("""<tool_call>{"name":"buscar_web","arguments":{}}</tool_call>""")
         val servicio = conHerramientaPropia()
